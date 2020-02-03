@@ -1,0 +1,30 @@
+Wolf's Bite
+	animation is 30 frames
+	starts (0,0)
+	ends (-100,0)
+	jerk is 5.0
+
+	
+
+
+
+bite_animation_length = 30
+bite_sprite_animation = FullAnimation(	end_pos=Vec(-100,0),
+										jerk=5.0,
+										duration=bite_animation_length,
+										sprites=[wolf_enemy_surface],
+										frame_lengths=[bite_animation_length],
+										anchor_points=[Vec(0, wolf_enemy_surface.get_height())])
+self.wolf.set_animation(	action_index=0,
+							animation=bite_sprite_animation)
+
+self.wolf.add_action(howl_action)
+howl_animation_length = 30
+howl_sprite_animation = FullAnimation(	end_pos=Vec(20,0),
+										jerk=1.0,
+										duration=howl_animation_length,
+										sprites=[wolf_enemy_howl_surface],
+										frame_lengths=[howl_animation_length],
+										anchor_points=[Vec(0, wolf_enemy_howl_surface.get_height())])
+self.wolf.set_animation(	action_index=1,
+							animation=howl_sprite_animation)

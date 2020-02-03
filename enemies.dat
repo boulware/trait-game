@@ -1,0 +1,36 @@
+# Valid alternative words:
+#
+# vigor/v/red/r
+# armor/a/yellow/y
+# focus/f/blue/b
+# target(s)/hit(s)
+# single/one
+# require(s)/need(s)
+# does/deal(s)
+# (vigor damage)/(damage to vigor)
+# allies/friendlies
+# heal(s)/recover(s)/increase(s)/boost(s)
+
+Wolf
+	has 4 vigor
+	has 0 armor
+	has 4 focus
+
+	has action Bite
+		targets single enemy
+		requires 4 focus
+		does 4 vigor damage
+
+	has action Howl
+		targets all allies
+		heals 1 focus
+bite_action = Action("Bite", TargetSet.SingleEnemy, required={Trait.Red:0, Trait.Blue:4, Trait.Yellow:0},
+															damages={Trait.Red:4, Trait.Blue:0, Trait.Yellow:0})
+		bite_action.add_sub_action(lambda: deal_damage([self.player], damages=bite_action.damages))
+
+		# Howl
+		howl_action = Action("Howl", TargetSet.AllAllies, required={Trait.Red:0, Trait.Blue:0, Trait.Yellow:0},
+														  damages={Trait.Red:0, Trait.Blue:-1, Trait.Yellow:0})
+		howl_action.add_sub_action(lambda: deal_damage(self.enemies, damages=howl_action.damages))
+
+self.wolf = Enemy(slot=0, red=4, yellow=0, blue=4)
