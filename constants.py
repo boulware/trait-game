@@ -1,12 +1,10 @@
-import util
-
 # Colors
 black = (0,0,0)
 grey = (127,127,127)
 light_grey = (200,200,200)
-dark_grey = (40,40,40)
 white = (255,255,255)
 red = (255,0,0)
+yellow = (255,255,0)
 light_red = (255,100,100)
 dark_red = (70,0,0)
 very_dark_red = (40,0,0)
@@ -15,8 +13,9 @@ light_green = (0,150,0)
 dark_green = (0,70,0)
 very_dark_green = (0,40,0)
 blue = (0,0,255)
-light_blue = (100,100,255)
-dark_blue = (0,0,70)
+ltblue = (50,50,255)
+dark_grey = (50,50,50)
+dkgrey = (30,30,30)
 very_dark_blue = (0,0,40)
 purple = (128,0,128)
 gold = (255,215,0)
@@ -24,12 +23,3 @@ pink = (255,200,200)
 blue_green = (0,150,150)
 
 # Game parameters
-screen_size = (800,800)
-grid_count = (5,6)
-node_size = (80,80)
-action_panel_size = (120,120)
-action_icon_size = (40,40)
-grid_origin = (100,10)
-hand_card_size = (80,160)
-card_proportion = hand_card_size[0]/hand_card_size[1]
-board_card_size = (int(node_size[0]*card_proportion),node_size[1])
