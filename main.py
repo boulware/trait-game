@@ -12,7 +12,7 @@ import debug
 from util import InputState
 from harm_math import Vec, Rect
 from harm_animation import Tween, FullAnimation
-from harm_draw import draw_surface, darken_color, draw_line, draw_rect, draw_text
+from harm_draw import draw_surface, darken_color, draw_line, draw_rect, draw_text, AlignX, AlignY, draw_x
 import constants as c
 
 random.seed()
@@ -22,6 +22,7 @@ screen_width, screen_height = 1400,800
 game = None
 
 pg.font.init()
+main_font_10 = pg.font.Font("font.ttf", 28)
 main_font_7 = pg.font.Font("font.ttf", 22)
 main_font_5 = pg.font.Font("font.ttf", 18)
 main_font_5_u = pg.font.Font("font.ttf", 18)
@@ -55,6 +56,10 @@ sword_surfaces = {	T.Vigor: pg.image.load("RedSword.png"),
 focus_symbol_surface = pg.image.load("ConcentrationSymbol.png")
 armor_symbol_surface = pg.image.load("ArmorSymbol.png")
 vigor_symbol_surface = pg.image.load("VigorSymbol.png")
+
+require_surfaces = {T.Vigor: pg.image.load("RedRequire.png"),
+					T.Armor: pg.image.load("YellowRequire.png"),
+					T.Focus: pg.image.load("BlueRequire.png")}
 
 character_surface = pg.image.load("Character.png")
 character_highlighted_surface = pg.image.load("CharacterHighlighted.png")
@@ -218,14 +223,18 @@ class Enemy:
 
 		self.max_values = copy(schematic.max_values)
 		self.cur_values = copy(schematic.cur_values)
-		self.idle_animation = copy(schematic.idle_animation)
-		self.hover_idle_animation = copy(schematic.hover_idle_animation)
+		self.idle_animation = deepcopy(schematic.idle_animation)
+		self.hover_idle_animation = deepcopy(schematic.hover_idle_animation)
 
-		self.actions = copy(schematic.actions)
-		self.action_animations = copy(schematic.action_animations) # Concurrent array to self.actions
+		self.actions = deepcopy(schematic.actions)
+		self.action_animations = deepcopy(schematic.action_animations) # Concurrent array to self.actions
 
 		for action in self.actions:
 			action.owner = self
+
+		self.action_buttons = [ActionButton(pos=Vec(x=enemy_slot_positions[self.slot],
+														y=enemy_ui_paddings[3] + i*action_button_size.y),
+												linked_action=action) for i, action in enumerate(self.actions)]
 
 		self.current_action_index = None
 		self.current_action_targets = None
@@ -265,7 +274,7 @@ class Enemy:
 				return
 
 			self.current_action_index = random.choice(possible_actions_indices)
-			self.current_action_targets = None
+			self.current_action_targets = []
 
 			action = self.actions[self.current_action_index]	
 			if action.target_set == TargetSet.Self:
@@ -337,19 +346,17 @@ class Enemy:
 				self.current_animation.draw(screen=screen,
 											pos=Vec(x_pos, enemy_ui_paddings[2]))
 
-			# Draws enemy sprite
-			# draw_surface(	screen=screen,
-			# 				pos=Vec(x_pos, enemy_ui_paddings[2])+self.current_animation.current_pos,
-			# 				surface=self.current_animation.current_sprite,
-			# 				y_align=AlignY.Down)
+			# Draws action buttons
+			for button in self.action_buttons: 
+				button.draw(screen=screen, hover=False)
 
-			for i, action in enumerate(self.actions):
-				# TODO: Don't make a new action button every frame.
-				button = ActionButton(pos=Vec(x_pos, enemy_ui_paddings[3] + i*action_button_size.y), linked_action=action)
-				if i == self.current_action_index:
-					button.draw(screen=screen, hover=True)
-				else:
-					button.draw(screen=screen, hover=False)
+			# for i, action in enumerate(self.actions):
+			# 	# TODO: Don't make a new action button every frame.
+			# 	button = ActionButton(pos=Vec(x_pos, enemy_ui_paddings[3] + i*action_button_size.y), linked_action=action)
+			# 	if i == self.current_action_index:
+			# 		button.draw(screen=screen, hover=True)
+			# 	else:
+			# 		button.draw(screen=screen, hover=False)
 	@property
 	def alive(self):
 		if self.cur_values[T.Vigor] > 0:
@@ -566,10 +573,22 @@ class ActionButton:
 		draw_rect(screen, border_color, self.pos, self.size, 1)
 
 		# Action name text
-		prev = draw_text(screen, text_color, self.pos + padding, self.linked_action.name, x_center=False, font=main_font_5_u)
+		prev_line = draw_text(	screen=screen, color=text_color, pos=self.pos + padding,
+								text=self.linked_action.name, x_center=False, y_center=False, font=main_font_5_u)
+		prev = prev_line
+		for trait, required in self.linked_action.required.items():
+			if required != 0:
+				s = require_surfaces[trait]
+				prev = draw_surface(screen=screen, pos=prev.center_right+Vec(s.get_width()/2 + 8, 0), surface=require_surfaces[trait],
+									x_align=AlignX.Center, y_align=AlignY.Center)
+				draw_text(	screen=screen, color=c.white, pos=prev.center,
+							text=str(required), x_center=True, y_center=True, font=main_font_10)
+				if(self.linked_action.owner.cur_values[trait] < required):
+					draw_x(screen=screen, color=c.grey, rect=prev)
 
 		# Target set text
-		prev = draw_text(screen, text_color, prev.bottom_left, target_set_strings[self.linked_action.target_set], x_center=False, font=main_font_4)
+		prev = draw_text(	screen=screen, color=text_color, pos=prev_line.bottom_left, text=target_set_strings[self.linked_action.target_set],
+							x_center=False, y_center=False, font=main_font_4)
 
 		# Trait sword icons and overlay'd damage text for the action
 		for trait, damage in self.linked_action.damages.items():
@@ -713,7 +732,7 @@ class Game:
 			rest_action = Action(	name="Rest",
 									owner=None,
 									target_set=TargetSet.Self,
-									required={T.Vigor:0, T.Focus:1, T.Armor:0}, 
+									required={T.Vigor:0, T.Focus:0, T.Armor:0}, 
 									damages={T.Vigor:-2, T.Focus:0, T.Armor:0})
 			rest_action.add_sub_action(lambda source, targets: deal_damage(kwargs={	'source': source,
 																					'targets': targets, 
@@ -723,7 +742,7 @@ class Game:
 			strike_action = Action(	name="Strike",
 									owner=None,
 									target_set=TargetSet.SingleEnemy,
-									required={T.Vigor:0, T.Focus:1, T.Armor:0},
+									required={T.Vigor:5, T.Focus:0, T.Armor:0},
 									damages={T.Vigor:2, T.Focus:0, T.Armor:0})
 			strike_action.add_sub_action(lambda source, targets: deal_damage(kwargs={	'source': source,
 																						'targets': targets, 

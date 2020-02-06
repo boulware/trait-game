@@ -1,6 +1,7 @@
 from enum import Enum
 import pygame as pg
 from harm_math import Vec, Rect
+import constants as c
 
 class AlignX(Enum):
 	Left = 0
@@ -39,7 +40,14 @@ def draw_text(screen, color, pos, text, font, x_center=True, y_center=True):
 	
 	screen.blit(text_surface, (x,y))
 	size = Vec(text_surface.get_width(), text_surface.get_height())
-	return Rect(pos, size)
+
+	#draw_rect(screen=screen, color=c.green, pos=Vec(x,y), size=size, width=1)
+	return Rect(Vec(x,y), size)
+
+def draw_x(screen, color, rect, width=5):
+	"""Draws X along the diagonals of the given [rect]"""
+	draw_line(screen=screen, color=color, start=rect.top_left, end=rect.bottom_right, width=width)
+	draw_line(screen=screen, color=color, start=rect.top_right, end=rect.bottom_left, width=width)
 
 def draw_surface(screen, pos, surface, x_align=AlignX.Left, y_align=AlignY.Up):
 	aligned_pos = Vec(pos.x, pos.y)
