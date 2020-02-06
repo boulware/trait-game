@@ -1,5 +1,5 @@
 import os, sys
-os.environ['SDL_VIDEO_WINDOW_POS'] = "%d,%d" % (5,30)
+os.environ['SDL_VIDEO_WINDOW_POS'] = "%d,%d" % (100,30)
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
 
 import math
@@ -11,12 +11,15 @@ from copy import copy, deepcopy
 import debug
 from util import InputState
 from harm_math import Vec, Rect
+from harm_animation import Tween, FullAnimation
+from harm_draw import draw_surface, darken_color, draw_line, draw_rect, draw_text
 import constants as c
 
 random.seed()
 
 import pygame as pg
 screen_width, screen_height = 1400,800
+game = None
 
 pg.font.init()
 main_font_7 = pg.font.Font("font.ttf", 22)
@@ -30,7 +33,7 @@ enemy_slot_positions = [600,800,1000,1200]
 friendly_slot_positions = [200,400,600]
 
 # [top of screen => trait bars, top of screen => enemy sprite, top of screen => action icons]
-enemy_ui_paddings = [100, 380, 380]
+enemy_ui_paddings = [70, 100, 380, 380]
 friendly_ui_paddings = [70, 100, 380, 380]
 
 # Trait enum:
@@ -49,7 +52,7 @@ sword_surfaces = {	T.Vigor: pg.image.load("RedSword.png"),
 # red_sword_surface = pg.image.load("RedSword.png")
 # blue_sword_surface = pg.image.load("BlueSword.png")
 # yellow_sword_surface = pg.image.load("YellowSword.png")
-concentration_symbol_surface = pg.image.load("ConcentrationSymbol.png")
+focus_symbol_surface = pg.image.load("ConcentrationSymbol.png")
 armor_symbol_surface = pg.image.load("ArmorSymbol.png")
 vigor_symbol_surface = pg.image.load("VigorSymbol.png")
 
@@ -63,63 +66,49 @@ wolf_enemy_surface = pg.image.load("WolfEnemy.png")
 wolf_enemy_highlighted_surface = pg.image.load("WolfEnemyHighlighted.png")
 wolf_enemy_howl_surface = pg.image.load("WolfEnemyHowl.png")
 
-def darken_color(color, amount):
-	return (int(color[0]*(1-amount)), int(color[1]*(1-amount)), int(color[2]*(1-amount)))
+vigor_damage_animation = FullAnimation(	duration=60,
+										sprites=[vigor_symbol_surface],
+										sprite_lengths=[60],
+										tweens=[Tween(	start_pos=Vec(0,0),
+														end_pos=Vec(0,50),
+														duration=60)],
+										anchor_points=[Vec(vigor_symbol_surface.get_width()/2, vigor_symbol_surface.get_height()/2)])
+armor_damage_animation = FullAnimation(	duration=60,
+										sprites=[armor_symbol_surface],
+										sprite_lengths=[60],
+										tweens=[Tween(	start_pos=Vec(0,0),
+														end_pos=Vec(0,50),
+														duration=60)],
+										anchor_points=[Vec(armor_symbol_surface.get_width()/2, armor_symbol_surface.get_height()/2)])
+focus_damage_animation = FullAnimation(	duration=60,
+										sprites=[focus_symbol_surface],
+										sprite_lengths=[60],
+										tweens=[Tween(	start_pos=Vec(0,0),
+														end_pos=Vec(0,50),
+														duration=60)],
+										anchor_points=[Vec(focus_symbol_surface.get_width()/2, focus_symbol_surface.get_height()/2)])
 
-
-
-def draw_line(screen, color, start, end, width=1):
-	pg.draw.line(screen, color, (start.x, start.y), (end.x, end.y), width)
-
-def draw_rect(screen, color, pos, size, width=0):
-	pg.draw.rect(screen, color, pg.Rect(int(pos.x), int(pos.y), int(size.x), int(size.y)), width)
-	return Rect(pos, size)
-
-def draw_text(screen, color, pos, text, font=main_font_5, x_center=True, y_center=True):
-	text_surface = font.render(text, True, color)
-
-	width, height = text_surface.get_size()
-	if x_center is True:
-		x = pos.x - width/2
-	else:
-		x = pos.x
-	if y_center is True:
-		y = pos.y - height/2
-	else:
-		y = pos.y
-	
-	screen.blit(text_surface, (x,y))
-	size = Vec(text_surface.get_width(), text_surface.get_height())
-	return Rect(pos, size)
-
-class AlignX(Enum):
-	Left = 0
-	Center = 1
-	Right = 2
-
-class AlignY(Enum):
-	Up = 0
-	Center = 1
-	Down = 2
-
-def draw_surface(screen, pos, surface, x_align=AlignX.Left, y_align=AlignY.Up):
-	aligned_pos = Vec(pos.x, pos.y)
-
-	if x_align == AlignX.Center:
-		aligned_pos.x -= surface.get_width()/2
-	elif x_align == AlignX.Right:
-		aligned_pos.x -= surface.get_width()
-
-	if y_align == AlignY.Center:
-		aligned_pos.y -= surface.get_height()/2
-	if y_align == AlignY.Down:
-		aligned_pos.y -= surface.get_height()
-
-	screen.blit(surface, (aligned_pos.x, aligned_pos.y))
-
-	# Return extent of drawn surface
-	size = Vec(surface.get_width(), surface.get_height())
-	return Rect(aligned_pos, size)
+vigor_heal_animation = FullAnimation(	duration=60,
+										sprites=[vigor_symbol_surface],
+										sprite_lengths=[60],
+										tweens=[Tween(	start_pos=Vec(0,50),
+														end_pos=Vec(0,0),
+														duration=60)],
+										anchor_points=[Vec(vigor_symbol_surface.get_width()/2, vigor_symbol_surface.get_height()/2)])
+armor_heal_animation = FullAnimation(	duration=60,
+										sprites=[armor_symbol_surface],
+										sprite_lengths=[60],
+										tweens=[Tween(	start_pos=Vec(0,50),
+														end_pos=Vec(0,0),
+														duration=60)],
+										anchor_points=[Vec(armor_symbol_surface.get_width()/2, armor_symbol_surface.get_height()/2)])
+focus_heal_animation = FullAnimation(	duration=60,
+										sprites=[focus_symbol_surface],
+										sprite_lengths=[60],
+										tweens=[Tween(	start_pos=Vec(0,50),
+														end_pos=Vec(0,0),
+														duration=60)],
+										anchor_points=[Vec(focus_symbol_surface.get_width()/2, focus_symbol_surface.get_height()/2)])
 
 
 healthbar_width = 100
@@ -131,7 +120,7 @@ def draw_healthbar(screen, color, pos, value, max_value, preview_damage=0):
 	if color == c.red:
 		prev = draw_surface(screen, pos, vigor_symbol_surface)
 	elif color == c.ltblue:
-		prev = draw_surface(screen, pos, concentration_symbol_surface)
+		prev = draw_surface(screen, pos, focus_symbol_surface)
 	elif color == c.yellow:
 		prev = draw_surface(screen, pos, armor_symbol_surface)
 
@@ -159,7 +148,10 @@ def draw_healthbar(screen, color, pos, value, max_value, preview_damage=0):
 		# Draw the amount color darker if it will change due to damage preview
 		amount_text_color = darken_color(c.white, 0.5)
 	# Draw trait value text next to bar
-	draw_text(	screen, amount_text_color, Vec(prev.right + bar_values_x_padding, prev.top + healthbar_height/2),
+	draw_text(	screen=screen,
+				color=amount_text_color,
+				font=main_font_5,
+				pos=Vec(prev.right + bar_values_x_padding, prev.top + healthbar_height/2),
 				text="{}".format(max(0, value-preview_damage)), x_center=False)
 
 	return Rect(pos, Vec(healthbar_width, healthbar_height))
@@ -185,200 +177,20 @@ class Timer:
 	@property
 	# Returns time remaining in seconds, assuming 60FPS
 	def time_remaining(self):
-		return (self.duration - self.current_frame) * 1/60
+		return (self.duration - self.current_frame) * 1/60	
 
-class Animation:
-	def __init__(self, frame_duration):
-		self.frame_duration = frame_duration
-		self.current_frame = 0
-	def update(self, frame_count=1):
-		"""Advance animation frame.
-		Return True if animation is finished, False otherwise"""
-		self.current_frame += frame_count
-		return self.finished
-	def restart(self):
-		self.current_frame = 0
-	@property
-	def finished(self):
-		"""Returns True if the animation has finished (last frame reached), False otherwise"""
-		if self.current_frame >= self.frame_duration:
-			return True
-		else:
-			return False		
+def get_sprite_slot_pos(slot, team):
+	x,y = 0,0 
+	if team == 0:
+		x = friendly_slot_positions[slot]
+		y = friendly_ui_paddings[2]
+	else:
+		x = enemy_slot_positions[slot]
+		y = enemy_ui_paddings[2]
 
-# class EmptyAnimation(Animation):
-# 	def __init__(self):
-# 		Animation.__init__(self=self, frame_duration=0)
-# 	@property
-# 	def finished(self):
-# 		return True
+	return Vec(x,y)
 
-class SpriteAnimation(Animation):
-	"""Tracks animation, returning appropriate images (pygame surface) for the
-	current animation frame"""
-	def __init__(self, frame_duration, ):
-		Animation.__init__(self=self, frame_duration=frame_duration)
-		self._sprites = [] # All sprites used by the animation
-		self._frames = [] # List of indexes to self._sprites for each frame in the animation.
-	def add_section(self, sprite, frame_count, anchor_pos):
-		"""Add a new sprite and number of frames to the end of the animation
 
-		[sprite] surface that will be drawn during this section
-		[frame_count] number of frames this surface will appear in the animation
-		[anchor_pos] pos within the sprite that will be drawn at the draw position of the animation"""
-		sprite_index = len(self._sprites)
-		self._sprites.append(sprite)
-		self._frames += [sprite_index]*frame_count
-	@property
-	def current_sprite(self):
-		""" Returns sprite (surface) corresponding to current frame"""
-		return self._sprites[self._frames[min(self.current_frame,len(self._sprites)-1)]]
-	
-	def __deepcopy__(self, memo):
-		other = SpriteAnimation(frame_duration=self.frame_duration)
-
-		other._sprites = self._sprites
-		for i, sprite in enumerate(other._sprites):
-			other._sprites[i] = sprite.copy()
-
-		other._frames = self._frames
-
-		return other
-
-# class Tween(Animation):
-# 	"""Tracks the positions frame-by-frame for a movement between two points.
-
-# 	Weighted interpolation between [start_pos] and [end_pos] over [frame_duration] frames,
-# 		with weighting [jerk]. [relative] tracks whether the positions should be
-# 		interpreted as relative or absolute positions"""
-# 	def __init__(self, frame_duration, start_pos, end_pos, jerk=1.0, relative_animation=False):
-# 		Animation.__init__(self=self, frame_duration=frame_duration)
-# 		self.start_pos = start_pos
-# 		self.end_pos = end_pos
-# 		self.jerk = jerk
-
-# 		self.current_frame = 0
-
-# 	@property
-# 	def current_pos(self):
-# 		"""Returns the pos for the current frame of the animation"""
-# 		t = self.current_frame / self.frame_duration
-# 		x = self.end_pos.x
-# 		y = self.end_pos.y
-
-# 		# Only use the complex expression if start and end are different in x or y respectively
-# 		# (Stops jitters caused by rounding)	
-# 		if(self.start_pos.x != self.end_pos.x):
-# 			x = math.floor((1-pow(t,self.jerk))*self.start_pos.x + pow(t,self.jerk)*self.end_pos.x)
-# 		if(self.start_pos.y != self.end_pos.y):
-# 			y = math.floor((1-pow(t,self.jerk))*self.start_pos.y + pow(t,self.jerk)*self.end_pos.y)
-
-# 		return Vec(x,y)
-
-class Tween:
-	def __init__(self, start_pos=Vec(0,0), end_pos=Vec(0,0), jerk=1.0, duration=1):
-		self.start_pos=start_pos
-		self.end_pos=end_pos
-		self.jerk=jerk
-		self.duration = duration
-	def pos(self, t):
-		x = self.end_pos.x
-		y = self.end_pos.y
-
-		if(self.start_pos.x != self.end_pos.x):
-			x = math.floor((1-pow(t,self.jerk))*self.start_pos.x + pow(t,self.jerk)*self.end_pos.x)
-		if(self.start_pos.y != self.end_pos.y):
-			y = math.floor((1-pow(t,self.jerk))*self.start_pos.y + pow(t,self.jerk)*self.end_pos.y)
-
-		return Vec(x,y)
-	
-
-class FullAnimation:
-	"""Animation which contains both tween and per-frame sprites"""
-	def __init__(	self,
-					duration=1,
-					sprites=[],
-					sprite_lengths=[],
-					tweens=[Tween()],
-					anchor_points=[],
-					loop=False):
-
-		self.duration = duration
-		self.cur_frame = 0
-		self._sprites = [] # All sprites used in the animation
-		self._frames = [] # Concurrent array with _sprites; which sprite to use on each frame
-		self._tweens = deepcopy(tweens)
-		self._tween_start_frames = [] # Concurrent to _tweens; the starting frame of each tween
-		self._cur_tween_index = 0
-		self.anchor_points = deepcopy(anchor_points) # Concurrent array with _sprites; corresponding anchor points
-		self.loop = loop # TODO: Implement loop
-
-		for sprite in sprites:
-			self._sprites.append(sprite.copy())
-		for i, sprite_length in enumerate(sprite_lengths):
-			self._frames += [i]*sprite_length
-
-		running_frame_count = 0
-		for i, tween in enumerate(self._tweens):
-			self._tween_start_frames.append(running_frame_count)
-			running_frame_count += tween.duration 
-
-	def update(self, frame_count=1):
-		"""Advance animation frame.
-		Return True if animation is finished, False otherwise"""
-		self.cur_frame += frame_count
-
-		if self._cur_tween_index != len(self._tweens)-1:
-			# If the current tween isn't the last tween
-			if self.cur_frame >= self._tween_start_frames[self._cur_tween_index+1]:
-				# If the animation frame has reached the beginning of the next tween
-				self._cur_tween_index += 1
-
-		return self.finished
-	def restart(self):
-		self.cur_frame = 0
-		self._cur_tween_index = 0
-	@property
-	def cur_tween(self):
-		return self._tweens[self._cur_tween_index]
-	@property
-	def finished(self):
-		"""Returns True if the animation has finished (last frame reached), False otherwise"""
-		if self.cur_frame >= self.duration-1:
-			return True
-		else:
-			return False
-
-	def draw(self, screen, pos):
-		cur_sprite_index = self._frames[self.cur_frame]
-		print("{} / {}".format(self.cur_frame - self._tween_start_frames[self._cur_tween_index], self.cur_tween.duration))
-		t = (self.cur_frame - self._tween_start_frames[self._cur_tween_index])/(self.cur_tween.duration) # should it be duration - 1?
-		draw_surface(	screen=screen,
-						pos=pos-
-							self.anchor_points[cur_sprite_index]+
-							self.cur_tween.pos(t=t),
-						surface=self._sprites[cur_sprite_index])
-
-	# @property
-	# def current_extent(self):
-	# 	"""Returns a Rect which represents the extent of the active sprite,
-	# 	as drawn in the current position"""
-	# 	return self._current_extent
-
-	def __deepcopy__(self, memo):
-		other = FullAnimation(	duration=self.duration,
-								tweens=self._tweens,
-								anchor_points=self.anchor_points,
-								loop=self.loop)
-
-		other._sprites = self._sprites
-		for i, sprite in enumerate(other._sprites):
-			other._sprites[i] = sprite.copy()
-
-		other._frames = copy(self._frames)
-		other._tween_start_frames = copy(self._tween_start_frames)
-
-		return other		
 
 class EnemySchematic:
 	def __init__(self, traits, idle_animation, hover_idle_animation):
@@ -402,6 +214,7 @@ class EnemySchematic:
 class Enemy:
 	def __init__(self, slot, schematic):
 		self.slot = slot
+		self.team = 1
 
 		self.max_values = copy(schematic.max_values)
 		self.cur_values = copy(schematic.cur_values)
@@ -428,7 +241,13 @@ class Enemy:
 			return True
 		else:
 			return False
+	@property
+	def rect(self):
+		rect = self.current_animation.rect
+		rect.pos += get_sprite_slot_pos(slot=self.slot, team=self.team)
+		return rect
 	
+
 	def start_action(self, action_index, targets):
 		if self.alive:
 			self.current_action_index = action_index
@@ -472,15 +291,16 @@ class Enemy:
 
 			if self.current_action_index != None and self.current_action_targets != None:
 				self.current_animation.restart()
+
+			self.actions[self.current_action_index].execute(user_traits=self.cur_values,
+													kwargs={	'source': self,
+																'targets':self.current_action_targets})
 	def update(self, frame_count=1):
 		if self.current_action_index is not None:
 			self.current_animation.update(frame_count)
 
 			# Switch back to animation-less sprite once animation is finished
 			if self.current_animation.finished is True:
-				self.actions[self.current_action_index].execute(user_traits=self.cur_values,
-																kwargs={	'source': self,
-																			'targets':self.current_action_targets})
 				self.current_action_index = None
 				self.current_action_targets = None
 
@@ -494,7 +314,7 @@ class Enemy:
 				cur_trait = self.cur_values[trait]
 				preview_damage = 0
 				if preview_action is not None:
-					if trait == T.Vigor:
+					if trait == T.Vigor and preview_action.damages[T.Vigor] > 0:
 						# Account for armor in preview damage
 						armor = self.cur_values[T.Armor]
 						preview_damage = max(1, preview_action.damages[trait] - armor)
@@ -503,7 +323,7 @@ class Enemy:
 
 				# Draws trait bars
 				draw_healthbar(	screen, trait_colors[trait],
-								Vec(x_pos, enemy_ui_paddings[0] + y_offset),
+								Vec(x_pos, enemy_ui_paddings[1] + y_offset),
 								cur_trait, max_value, preview_damage)
 
 				y_offset += healthbar_height
@@ -512,20 +332,20 @@ class Enemy:
 			sprite_surface = wolf_enemy_surface
 			if hover:
 				self.hover_idle_animation.draw( screen=screen,
-												pos=Vec(x_pos, enemy_ui_paddings[1]))
+												pos=Vec(x_pos, enemy_ui_paddings[2]))
 			else:
 				self.current_animation.draw(screen=screen,
-											pos=Vec(x_pos, enemy_ui_paddings[1]))
+											pos=Vec(x_pos, enemy_ui_paddings[2]))
 
 			# Draws enemy sprite
 			# draw_surface(	screen=screen,
-			# 				pos=Vec(x_pos, enemy_ui_paddings[1])+self.current_animation.current_pos,
+			# 				pos=Vec(x_pos, enemy_ui_paddings[2])+self.current_animation.current_pos,
 			# 				surface=self.current_animation.current_sprite,
 			# 				y_align=AlignY.Down)
 
 			for i, action in enumerate(self.actions):
 				# TODO: Don't make a new action button every frame.
-				button = ActionButton(pos=Vec(x_pos, enemy_ui_paddings[2] + i*action_button_size.y), linked_action=action)
+				button = ActionButton(pos=Vec(x_pos, enemy_ui_paddings[3] + i*action_button_size.y), linked_action=action)
 				if i == self.current_action_index:
 					button.draw(screen=screen, hover=True)
 				else:
@@ -542,6 +362,7 @@ class Friendly:
 		self.max_values = copy(traits)
 		self.cur_values = copy(self.max_values)
 		self.slot = slot
+		self.team = 0
 		self.actions = []
 		self.action_points = 1
 
@@ -565,6 +386,11 @@ class Friendly:
 			return
 
 		self.action_animations[action_index] = animation
+	@property
+	def rect(self):
+		rect = self.current_animation.rect
+		rect.pos += get_sprite_slot_pos(slot=self.slot, team=self.team)
+		return rect
 	@property
 	def alive(self):
 		if self.cur_values[T.Vigor] > 0:
@@ -629,29 +455,55 @@ class Friendly:
 				for button in self.action_buttons:
 					button.draw(screen=screen, hover=False)
 
+def play_animation(kwargs):
+	game = kwargs['game']
+	animation = kwargs['animation']
+	pos = kwargs['pos']
+	source = kwargs['source']
 
-def deal_damage(source, targets, damages):
+	if(pos == 'SelfPos'):
+		game.start_animation(animation=animation, pos=	source.rect.center
+														+ Vec(friendly_slot_positions[source.slot], friendly_ui_paddings[1]))
+def deal_damage(kwargs):
+	source = kwargs['source']
+	targets = kwargs['targets']
+	damages = kwargs['damages']
+
+	global game
+
 	if targets == TargetSet.Self:
-		for trait, amount in damages.items():
-			source.cur_values[trait] -= amount
-			if source.cur_values[trait] < 0:
-				source.cur_values[trait] = 0		
-	else:
-		for target in targets:
-			for trait, amount in damages.items():
-				if trait == T.Vigor:
-					# Account for armor in any vigor damage.
-					armor = target.cur_values[T.Armor]
-					if amount > 0:
-						target.cur_values[trait] -= max(1, amount - armor)
-					else:
-						target.cur_values[trait] -= amount
+		targets = [source]
 
+	for target in targets:
+		for trait, amount in damages.items():
+			icon_pos = get_sprite_slot_pos(slot=target.slot, team=target.team) + Vec(100, -100)
+			if trait == T.Vigor and amount != 0:
+				# Account for armor in any vigor damage.
+				armor = target.cur_values[T.Armor]
+				if amount > 0:
+					target.cur_values[trait] -= max(1, amount - armor)
 				else:
 					target.cur_values[trait] -= amount
 
-				if target.cur_values[trait] < 0:
-					target.cur_values[trait] = 0
+				if amount > 0:
+					game.start_animation(animation=vigor_damage_animation, pos=icon_pos)
+				else:
+					game.start_animation(animation=vigor_heal_animation, pos=icon_pos)						
+			elif trait == T.Armor and amount != 0:
+				target.cur_values[trait] -= amount
+				if amount > 0:
+					game.start_animation(animation=armor_damage_animation, pos=icon_pos)
+				else:
+					game.start_animation(animation=armor_heal_animation, pos=icon_pos)						
+			elif trait == T.Focus and amount != 0:
+				target.cur_values[trait] -= amount
+				if amount > 0:
+					game.start_animation(animation=focus_damage_animation, pos=icon_pos)
+				else:
+					game.start_animation(animation=focus_heal_animation, pos=icon_pos)
+			if target.cur_values[trait] < 0:
+				target.cur_values[trait] = 0
+				
 
 class TargetSet(Enum):
 	All = 0
@@ -831,6 +683,7 @@ class Game:
 		self.selected_action_button = None
 
 		self.active_timers = []
+		self.active_animations = []
 
 		self.friendlies = []
 		self.friendlies.append(Friendly(slot=0,
@@ -855,13 +708,6 @@ class Game:
 									)
 
 
-
-		# self.action_buttons = []
-		# self.action_buttons.append(ActionButton(Vec(0,100+action_button_size.y*0), rest_action))
-		# self.action_buttons.append(ActionButton(Vec(0,100+action_button_size.y*1), strike_action))
-		# self.action_buttons.append(ActionButton(Vec(0,100+action_button_size.y*2), intimidate_action))
-		# self.action_buttons.append(ActionButton(Vec(0,100+action_button_size.y*3), bash_action))
-
 		for friendly in self.friendlies:
 			# Rest
 			rest_action = Action(	name="Rest",
@@ -869,7 +715,9 @@ class Game:
 									target_set=TargetSet.Self,
 									required={T.Vigor:0, T.Focus:1, T.Armor:0}, 
 									damages={T.Vigor:-2, T.Focus:0, T.Armor:0})
-			rest_action.add_sub_action(lambda source, targets: deal_damage(source=source, targets=targets, damages=rest_action.damages))
+			rest_action.add_sub_action(lambda source, targets: deal_damage(kwargs={	'source': source,
+																					'targets': targets, 
+																					'damages': rest_action.damages}))
 
 			# Strike
 			strike_action = Action(	name="Strike",
@@ -877,7 +725,9 @@ class Game:
 									target_set=TargetSet.SingleEnemy,
 									required={T.Vigor:0, T.Focus:1, T.Armor:0},
 									damages={T.Vigor:2, T.Focus:0, T.Armor:0})
-			strike_action.add_sub_action(lambda source, targets: deal_damage(source=source, targets=targets, damages=strike_action.damages))
+			strike_action.add_sub_action(lambda source, targets: deal_damage(kwargs={	'source': source,
+																						'targets': targets, 
+																						'damages': strike_action.damages}))
 
 			# Intimidate
 			intimidate_action = Action(	name="Intimidate",
@@ -885,7 +735,9 @@ class Game:
 										target_set=TargetSet.SingleEnemy,
 										required={T.Vigor:0, T.Focus:1, T.Armor:0},
 										damages={T.Vigor:0, T.Focus:5, T.Armor:0})
-			intimidate_action.add_sub_action(lambda source, targets: deal_damage(source=source, targets=targets, damages=intimidate_action.damages))
+			intimidate_action.add_sub_action(lambda source, targets: deal_damage(kwargs={	'source': source,
+																							'targets': targets, 
+																							'damages': intimidate_action.damages}))
 
 			# Bash
 			bash_action = Action(	name="Bash",
@@ -893,7 +745,9 @@ class Game:
 									target_set=TargetSet.SingleEnemy,
 									required={T.Vigor:0, T.Focus:1, T.Armor:0},
 									damages={T.Vigor:0, T.Focus:0, T.Armor:2})
-			bash_action.add_sub_action(lambda source, targets: deal_damage(source=source, targets=targets, damages=bash_action.damages))		
+			bash_action.add_sub_action(lambda source, targets: deal_damage(kwargs={	'source': source,
+																					'targets': targets, 
+																					'damages': bash_action.damages}))
 
 			friendly.add_action(rest_action)
 			friendly.add_action(strike_action)
@@ -957,7 +811,9 @@ class Game:
 								target_set=TargetSet.SingleEnemy,
 								required={T.Vigor:0, T.Focus:4, T.Armor:0},
 								damages={T.Vigor:4, T.Focus:0, T.Armor:0})
-		bite_action.add_sub_action(lambda source, targets: deal_damage(source=source, targets=targets, damages=bite_action.damages))
+		bite_action.add_sub_action(lambda source, targets: deal_damage(kwargs={	'source': source,
+																				'targets': targets, 
+																				'damages': bite_action.damages}))
 
 		# Howl
 		howl_action = Action(	name="Howl",
@@ -965,7 +821,9 @@ class Game:
 								target_set=TargetSet.AllAllies,
 								required={T.Vigor:0, T.Focus:0, T.Armor:0},
 								damages={T.Vigor:0, T.Focus:-1, T.Armor:0})
-		howl_action.add_sub_action(lambda source, targets: deal_damage(source=source, targets=targets, damages=howl_action.damages))
+		howl_action.add_sub_action(lambda source, targets: deal_damage(kwargs={	'source': source,
+																				'targets': targets, 
+																				'damages': howl_action.damages}))
 
 		wolf_schematic.add_action(bite_action)
 		wolf_schematic.add_action(howl_action)
@@ -1004,7 +862,9 @@ class Game:
 								target_set=TargetSet.AllAllies,
 								required={T.Vigor:0, T.Focus:2, T.Armor:0},
 								damages={T.Vigor:-2, T.Focus:0, T.Armor:0})
-		heal_action.add_sub_action(lambda source, targets: deal_damage(source=source, targets=targets, damages=heal_action.damages))
+		heal_action.add_sub_action(lambda source, targets: deal_damage(kwargs={	'source': source,
+																				'targets': targets, 
+																				'damages': heal_action.damages}))
 
 		# Armor
 		armor_action = Action(	name="Armor",
@@ -1012,8 +872,12 @@ class Game:
 								target_set=TargetSet.SingleAllyNotSelf,
 								required={T.Vigor:0, T.Focus:0, T.Armor:1},
 								damages={T.Vigor:0, T.Focus:0, T.Armor:-1})
-		armor_action.add_sub_action(lambda source, targets: deal_damage(source=source, targets=targets, damages=armor_action.damages))
-		armor_action.add_sub_action(lambda source, targets: deal_damage(source=source, targets=TargetSet.Self, damages={T.Vigor:0, T.Focus:0, T.Armor:1}))
+		armor_action.add_sub_action(lambda source, targets: deal_damage(kwargs={'source': source,
+																				'targets': targets, 
+																				'damages': armor_action.damages}))
+		armor_action.add_sub_action(lambda source, targets: deal_damage(kwargs={'source': source,
+																				'targets': TargetSet.Self, 
+																				'damages': {T.Vigor:0, T.Armor:1, T.Focus:0}}))
 
 		human_schematic.add_action(heal_action)
 		human_schematic.add_action(armor_action)
@@ -1030,7 +894,8 @@ class Game:
 
 		# Armor Animation
 		animation_length = 60
-		sprite_animation = FullAnimation(	tweens=[Tween(end_pos=Vec(-100,0), jerk=0.8, duration=animation_length)],
+		sprite_animation = FullAnimation(	tweens=[Tween(end_pos=Vec(-100,0), jerk=0.1, duration=30),
+													Tween(start_pos=Vec(-100,0), end_pos=Vec(0,0), jerk=0.4, duration=30)],
 											duration=animation_length,
 											sprites=[human_surface],
 											sprite_lengths=[animation_length],
@@ -1057,7 +922,8 @@ class Game:
 			debug.debugger = debug.DebugUI(game=self, active=True)
 
 	def draw(self):
-		pass
+		for data in self.active_animations:
+			data['animation'].draw(screen=self.screen, pos=data['pos'])
 
 	def any_key_pressed(self, input_state):
 		pass
@@ -1072,6 +938,12 @@ class Game:
 				self.input.unset_repeat_key(event.key)
 
 		# Update
+		for data in self.active_animations:
+			data['animation'].update()
+
+		# Remove finished animations from active_animations
+		self.active_animations = [e for e in self.active_animations if e['animation'].finished == False]
+
 		self.input.next_state(new_keys=pg.key.get_pressed(), new_buttons=pg.mouse.get_pressed())
 		self.input.update(df=1)
 		self.any_key_pressed(input_state=self.input)
@@ -1260,7 +1132,11 @@ class Game:
 		pg.display.flip()
 		self.game_clock.tick(60)
 
+	def start_animation(self, animation, pos):
+		self.active_animations.append({'animation': deepcopy(animation), 'pos':pos})
+
 def main():
+	global game
 	game = Game()
 	while True:
 		game.update(df=1, mouse_pos=(0,0))
