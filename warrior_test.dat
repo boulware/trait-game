@@ -1,0 +1,19 @@
+name is Warrior
+	has 50 Vigor
+	has 10 Armor
+	has 5 Focus
+	has action Rest
+		targets Self
+		deals -2 Vigor damage
+	has action Medium Strike
+		targets Single Enemy
+		deals 5 Vigor damage
+		requires 2 Vigor
+	has action Intimidate
+		targets Single Enemy
+		deals 5 Focus damage
+		requires 1 Focus
+	has action Medium Bash
+		targets Single Enemy
+		deals 4 Armor damage
+		requires 1 Focus

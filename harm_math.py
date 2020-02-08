@@ -1,7 +1,11 @@
 class Vec:
 	def __init__(self, x, y):
-		self.x = x
-		self.y = y
+			self.x = x
+			self.y = y
+
+	@classmethod
+	def fromtuple(cls, t):
+		return cls(x=t[0], y=t[1])
 
 	def __add__(self, other):
 		return Vec(self.x + other.x, self.y + other.y)
@@ -14,6 +18,18 @@ class Vec:
 
 	def __repr__(self):
 		return "<{}, {}>".format(self.x, self.y)
+
+	def __getitem__(self, key):
+		if key == 0: return self.x
+		if key == 1: return self.y
+
+		raise IndexError("invalid key {}".format(key))
+
+
+	@property
+	def tuple(self):
+		return (self.x, self.y)
+	
 
 class Rect:
 	def __init__(self, pos, size):
@@ -65,3 +81,6 @@ class Rect:
 				return True
 
 		return False
+
+def index_iterable(iter, i):
+	return iter[i]

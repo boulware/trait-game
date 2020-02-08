@@ -4,6 +4,7 @@ os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
 
 import math
 import random
+import json
 from functools import partial
 from enum import Enum
 from copy import copy, deepcopy
@@ -12,7 +13,7 @@ import debug
 from util import InputState
 from harm_math import Vec, Rect
 from harm_animation import Tween, FullAnimation
-from harm_draw import draw_surface, darken_color, draw_line, draw_rect, draw_text, AlignX, AlignY, draw_x
+from harm_draw import Surface, draw_surface, darken_color, draw_line, draw_rect, draw_text, AlignX, AlignY, draw_x, draw_text_wrapped
 import constants as c
 
 random.seed()
@@ -28,6 +29,7 @@ main_font_5 = pg.font.Font("font.ttf", 18)
 main_font_5_u = pg.font.Font("font.ttf", 18)
 main_font_5_u.set_underline(True)
 main_font_4 = pg.font.Font("font.ttf", 12)
+main_font_2 = pg.font.Font("font.ttf", 8)
 
 slot_width = 200
 enemy_slot_positions = [600,800,1000,1200]
@@ -46,30 +48,31 @@ class T(Enum):
 
 trait_count = 3
 trait_colors = {T.Vigor: c.red, T.Armor:c.yellow, T.Focus: c.ltblue}
+trait_strings = {T.Vigor: "Vigor", T.Armor: "Armor", T.Focus: "Focus"}
 
-sword_surfaces = {	T.Vigor: pg.image.load("RedSword.png"),
-					T.Armor: pg.image.load("YellowSword.png"),
-					T.Focus: pg.image.load("BlueSword.png")}
-# red_sword_surface = pg.image.load("RedSword.png")
-# blue_sword_surface = pg.image.load("BlueSword.png")
-# yellow_sword_surface = pg.image.load("YellowSword.png")
-focus_symbol_surface = pg.image.load("ConcentrationSymbol.png")
-armor_symbol_surface = pg.image.load("ArmorSymbol.png")
-vigor_symbol_surface = pg.image.load("VigorSymbol.png")
+sword_surfaces = {	T.Vigor: Surface.from_file("RedSword.png"),
+					T.Armor: Surface.from_file("YellowSword.png"),
+					T.Focus: Surface.from_file("BlueSword.png")}
+# red_sword_surface = Surface.from_file("RedSword.png")
+# blue_sword_surface = Surface.from_file("BlueSword.png")
+# yellow_sword_surface = Surface.from_file("YellowSword.png")
+focus_symbol_surface = Surface.from_file("ConcentrationSymbol.png")
+armor_symbol_surface = Surface.from_file("ArmorSymbol.png")
+vigor_symbol_surface = Surface.from_file("VigorSymbol.png")
 
-require_surfaces = {T.Vigor: pg.image.load("RedRequire.png"),
-					T.Armor: pg.image.load("YellowRequire.png"),
-					T.Focus: pg.image.load("BlueRequire.png")}
+require_surfaces = {T.Vigor: Surface.from_file("RedRequire.png"),
+					T.Armor: Surface.from_file("YellowRequire.png"),
+					T.Focus: Surface.from_file("BlueRequire.png")}
 
-character_surface = pg.image.load("Character.png")
-character_highlighted_surface = pg.image.load("CharacterHighlighted.png")
+character_surface = Surface.from_file("Character.png")
+character_highlighted_surface = Surface.from_file("CharacterHighlighted.png")
 
-human_surface = pg.image.load("Human.png")
-human_highlighted_surface = pg.image.load("Human.png")
+human_surface = Surface.from_file("Human.png")
+human_highlighted_surface = Surface.from_file("Human.png")
 
-wolf_enemy_surface = pg.image.load("WolfEnemy.png")
-wolf_enemy_highlighted_surface = pg.image.load("WolfEnemyHighlighted.png")
-wolf_enemy_howl_surface = pg.image.load("WolfEnemyHowl.png")
+wolf_enemy_surface = Surface.from_file("WolfEnemy.png")
+wolf_enemy_highlighted_surface = Surface.from_file("WolfEnemyHighlighted.png")
+wolf_enemy_howl_surface = Surface.from_file("WolfEnemyHowl.png")
 
 vigor_damage_animation = FullAnimation(	duration=60,
 										sprites=[vigor_symbol_surface],
@@ -77,21 +80,21 @@ vigor_damage_animation = FullAnimation(	duration=60,
 										tweens=[Tween(	start_pos=Vec(0,0),
 														end_pos=Vec(0,50),
 														duration=60)],
-										anchor_points=[Vec(vigor_symbol_surface.get_width()/2, vigor_symbol_surface.get_height()/2)])
+										anchor_points=[Vec(vigor_symbol_surface.width/2, vigor_symbol_surface.height/2)])
 armor_damage_animation = FullAnimation(	duration=60,
 										sprites=[armor_symbol_surface],
 										sprite_lengths=[60],
 										tweens=[Tween(	start_pos=Vec(0,0),
 														end_pos=Vec(0,50),
 														duration=60)],
-										anchor_points=[Vec(armor_symbol_surface.get_width()/2, armor_symbol_surface.get_height()/2)])
+										anchor_points=[Vec(armor_symbol_surface.width/2, armor_symbol_surface.height/2)])
 focus_damage_animation = FullAnimation(	duration=60,
 										sprites=[focus_symbol_surface],
 										sprite_lengths=[60],
 										tweens=[Tween(	start_pos=Vec(0,0),
 														end_pos=Vec(0,50),
 														duration=60)],
-										anchor_points=[Vec(focus_symbol_surface.get_width()/2, focus_symbol_surface.get_height()/2)])
+										anchor_points=[Vec(focus_symbol_surface.width/2, focus_symbol_surface.height/2)])
 
 vigor_heal_animation = FullAnimation(	duration=60,
 										sprites=[vigor_symbol_surface],
@@ -99,35 +102,35 @@ vigor_heal_animation = FullAnimation(	duration=60,
 										tweens=[Tween(	start_pos=Vec(0,50),
 														end_pos=Vec(0,0),
 														duration=60)],
-										anchor_points=[Vec(vigor_symbol_surface.get_width()/2, vigor_symbol_surface.get_height()/2)])
+										anchor_points=[Vec(vigor_symbol_surface.width/2, vigor_symbol_surface.height/2)])
 armor_heal_animation = FullAnimation(	duration=60,
 										sprites=[armor_symbol_surface],
 										sprite_lengths=[60],
 										tweens=[Tween(	start_pos=Vec(0,50),
 														end_pos=Vec(0,0),
 														duration=60)],
-										anchor_points=[Vec(armor_symbol_surface.get_width()/2, armor_symbol_surface.get_height()/2)])
+										anchor_points=[Vec(armor_symbol_surface.width/2, armor_symbol_surface.height/2)])
 focus_heal_animation = FullAnimation(	duration=60,
 										sprites=[focus_symbol_surface],
 										sprite_lengths=[60],
 										tweens=[Tween(	start_pos=Vec(0,50),
 														end_pos=Vec(0,0),
 														duration=60)],
-										anchor_points=[Vec(focus_symbol_surface.get_width()/2, focus_symbol_surface.get_height()/2)])
+										anchor_points=[Vec(focus_symbol_surface.width/2, focus_symbol_surface.height/2)])
 
 
 healthbar_width = 100
 healthbar_height = 32
-def draw_healthbar(screen, color, pos, value, max_value, preview_damage=0):
+def draw_healthbar(target, color, pos, value, max_value, preview_damage=0):
 	bar_values_x_padding = 4
 
 	prev = Rect(Vec(0,0), Vec(0,0))
 	if color == c.red:
-		prev = draw_surface(screen, pos, vigor_symbol_surface)
+		prev = draw_surface(target=target, pos=pos, surface=vigor_symbol_surface)
 	elif color == c.ltblue:
-		prev = draw_surface(screen, pos, focus_symbol_surface)
+		prev = draw_surface(target=target, pos=pos, surface=focus_symbol_surface)
 	elif color == c.yellow:
-		prev = draw_surface(screen, pos, armor_symbol_surface)
+		prev = draw_surface(target=target, pos=pos, surface=armor_symbol_surface)
 
 	if value > 0:
 		# Draw colored part of bar, capped at size of healthbar (extra points won't draw it past the bar)
@@ -135,25 +138,25 @@ def draw_healthbar(screen, color, pos, value, max_value, preview_damage=0):
 		colored_bar_width = min(healthbar_width, healthbar_width * (value/max_value))
 		if preview_damage >= value:
 			# Preview damage will cover the entire normal bar, so skip drawing it and just draw the preview bar
-			draw_rect(screen, darken_color(color,0.5), prev.top_right, Vec(colored_bar_width, healthbar_height))
+			draw_rect(target, darken_color(color,0.5), prev.top_right, Vec(colored_bar_width, healthbar_height))
 		else:
-			draw_rect(screen, color, prev.top_right, Vec(colored_bar_width, healthbar_height))
+			draw_rect(target, color, prev.top_right, Vec(colored_bar_width, healthbar_height))
 
 			if preview_damage != 0 and value <= max_value: # TODO: This is glitchy when value > max_value, so we just don't draw anything for now
 				# Draw darker colored previewed damage section of bar.
 				preview_bar_start = prev.top_right + Vec(healthbar_width * ((value-preview_damage)/max_value), 0)
 				preview_bar_size = Vec(healthbar_width * (preview_damage/max_value), healthbar_height)
-				draw_rect(screen, darken_color(color, 0.5), preview_bar_start, preview_bar_size)
+				draw_rect(target, darken_color(color, 0.5), preview_bar_start, preview_bar_size)
 
 	# Draw white outline of bar
-	prev = draw_rect(screen, c.white, prev.top_right, Vec(healthbar_width, healthbar_height), 1)
+	prev = draw_rect(target, c.white, prev.top_right, Vec(healthbar_width, healthbar_height), 1)
 
 	amount_text_color = c.white
 	if preview_damage != 0:
 		# Draw the amount color darker if it will change due to damage preview
 		amount_text_color = darken_color(c.white, 0.5)
 	# Draw trait value text next to bar
-	draw_text(	screen=screen,
+	draw_text(	target=target,
 				color=amount_text_color,
 				font=main_font_5,
 				pos=Vec(prev.right + bar_values_x_padding, prev.top + healthbar_height/2),
@@ -197,10 +200,10 @@ def get_sprite_slot_pos(slot, team):
 
 
 
-class EnemySchematic:
-	def __init__(self, traits, idle_animation, hover_idle_animation):
-		self.max_values = copy(traits)
-		self.cur_values = copy(self.max_values)
+class UnitSchematic:
+	def __init__(self, name, traits, idle_animation, hover_idle_animation):
+		self.name = name
+		self.max_traits = copy(traits)
 		self.idle_animation = copy(idle_animation)
 		self.hover_idle_animation = copy(hover_idle_animation)
 
@@ -216,26 +219,44 @@ class EnemySchematic:
 
 		self.action_animations[action_index] = animation
 
-class Enemy:
-	def __init__(self, slot, schematic):
-		self.slot = slot
-		self.team = 1
+	def serialize(self):
+		s = ""
+		s += "name is {}\n".format(self.name)
+		for trait, value in self.max_traits.items():
+			if value == 0: continue
+			s += "\thas {} {}\n".format(value, trait_strings[trait])
+		for action in self.actions:
+			s += "\thas action {}\n".format(action.name)
+			s += "\t\ttargets {}\n".format(target_set_strings[action.target_set])
+			for trait, value in action.damages.items():
+				if value == 0: continue
+				s += "\t\tdeals {} {} damage\n".format(value, trait_strings[trait])
+			for trait, value in action.required.items():
+				if value == 0: continue
+				s += "\t\trequires {} {}\n".format(value, trait_strings[trait])
 
-		self.max_values = copy(schematic.max_values)
-		self.cur_values = copy(schematic.cur_values)
+		return s
+
+
+
+class Unit:
+	def __init__(self, team, slot, schematic):
+		self.team = team
+		self.slot = slot
+		self.max_traits = copy(schematic.max_traits)
+		self.cur_traits = copy(schematic.max_values)
 		self.idle_animation = deepcopy(schematic.idle_animation)
 		self.hover_idle_animation = deepcopy(schematic.hover_idle_animation)
-
 		self.actions = deepcopy(schematic.actions)
 		self.action_animations = deepcopy(schematic.action_animations) # Concurrent array to self.actions
 
 		for action in self.actions:
-			action.owner = self
-
+			action.owner = self		
 		self.action_buttons = [ActionButton(pos=Vec(x=enemy_slot_positions[self.slot],
 														y=enemy_ui_paddings[3] + i*action_button_size.y),
 												linked_action=action) for i, action in enumerate(self.actions)]
-
+		
+		self.action_points = 1
 		self.current_action_index = None
 		self.current_action_targets = None
 	@property
@@ -251,12 +272,16 @@ class Enemy:
 		else:
 			return False
 	@property
+	def current_action(self):
+		if self.current_action_index != None:
+			return self.actions[self.current_action_index]
+		else:
+			return None
+	@property
 	def rect(self):
 		rect = self.current_animation.rect
 		rect.pos += get_sprite_slot_pos(slot=self.slot, team=self.team)
 		return rect
-	
-
 	def start_action(self, action_index, targets):
 		if self.alive:
 			self.current_action_index = action_index
@@ -267,6 +292,7 @@ class Enemy:
 			# Check each of our actions, and add them to the list of possible random actions
 			for i,action in enumerate(self.actions):
 				if action.can_use(user_traits=self.cur_values):
+
 					possible_actions_indices.append(i)
 
 			if len(possible_actions_indices) == 0:
@@ -283,9 +309,10 @@ class Enemy:
 				non_dead_allies = [e for e in allies if e.alive == True]
 				if len(non_dead_allies) > 0:
 					self.current_action_targets = [random.choice(non_dead_allies)]
-			elif action.target_set == TargetSet.SingleAllyNotSelf:
+			elif action.target_set == TargetSet.OtherAlly:
 				non_self_non_dead_allies = [e for e in allies if e != self and e.alive == True]
 				if len(non_self_non_dead_allies) > 0:
+					print('t')
 					self.current_action_targets = [random.choice(non_self_non_dead_allies)]
 			elif action.target_set == TargetSet.AllAllies:
 				non_dead_allies = [e for e in allies if e.alive == True]				
@@ -312,8 +339,11 @@ class Enemy:
 			if self.current_animation.finished is True:
 				self.current_action_index = None
 				self.current_action_targets = None
-
-	def draw(self, screen, hover=False, preview_action=None):
+	def draw(self, target, mouse_pos, preview_action=None):
+		if self.check_hover(mouse_pos=mouse_pos) == True:
+			hover = True
+		else:
+			hover = False
 		if self.alive:
 			x_pos = enemy_slot_positions[self.slot]
 
@@ -331,7 +361,7 @@ class Enemy:
 						preview_damage = preview_action.damages[trait]
 
 				# Draws trait bars
-				draw_healthbar(	screen, trait_colors[trait],
+				draw_healthbar(	target, trait_colors[trait],
 								Vec(x_pos, enemy_ui_paddings[1] + y_offset),
 								cur_trait, max_value, preview_damage)
 
@@ -340,127 +370,155 @@ class Enemy:
 			# Draws enemy sprite
 			sprite_surface = wolf_enemy_surface
 			if hover:
-				self.hover_idle_animation.draw( screen=screen,
-												pos=Vec(x_pos, enemy_ui_paddings[2]))
+				self.current_animation.draw(target=target,
+											pos=Vec(x_pos, enemy_ui_paddings[2]))
 			else:
-				self.current_animation.draw(screen=screen,
+				self.current_animation.draw(target=target,
 											pos=Vec(x_pos, enemy_ui_paddings[2]))
 
 			# Draws action buttons
-			for button in self.action_buttons: 
-				button.draw(screen=screen, hover=False)
+			for button in self.action_buttons:
+				if button.linked_action == self.current_action:
+					force_highlight = True
+				else:
+					force_highlight = False
+
+				button.draw(target=target, mouse_pos=mouse_pos, force_highlight=force_highlight)
 
 			# for i, action in enumerate(self.actions):
 			# 	# TODO: Don't make a new action button every frame.
 			# 	button = ActionButton(pos=Vec(x_pos, enemy_ui_paddings[3] + i*action_button_size.y), linked_action=action)
 			# 	if i == self.current_action_index:
-			# 		button.draw(screen=screen, hover=True)
+			# 		button.draw(target=screen, hover=True)
 			# 	else:
-			# 		button.draw(screen=screen, hover=False)
+			# 		button.draw(target=screen, hover=False)
 	@property
 	def alive(self):
 		if self.cur_values[T.Vigor] > 0:
 			return True
 		else:
 			return False
-	
-class Friendly:
-	def __init__(self, slot, traits, idle_animation, hover_idle_animation):
-		self.max_values = copy(traits)
-		self.cur_values = copy(self.max_values)
-		self.slot = slot
-		self.team = 0
-		self.actions = []
-		self.action_points = 1
-
-		self.idle_animation = copy(idle_animation)
-		self.hover_idle_animation = copy(hover_idle_animation)
-
-		self.action_animations = [] # Concurrent array to self.actions
-		self.action_buttons = [] # Concurrent array to self.actions
-
-		self.current_action_index = None
-	def add_action(self, action):
-		action.owner = self
-		self.actions.append(deepcopy(action))
-		self.action_animations.append(self.idle_animation)
-		self.action_buttons.append(ActionButton(pos=Vec(x=friendly_slot_positions[self.slot],
-														y=friendly_ui_paddings[3] + (len(self.actions)-1)*action_button_size.y),
-												linked_action=action))
-	def set_animation(self, action_index, animation):
-		if action_index > len(self.action_animations)-1:
-			print("Tried to set friendly animation for non-existent action.")
-			return
-
-		self.action_animations[action_index] = animation
-	@property
-	def rect(self):
-		rect = self.current_animation.rect
-		rect.pos += get_sprite_slot_pos(slot=self.slot, team=self.team)
-		return rect
-	@property
-	def alive(self):
-		if self.cur_values[T.Vigor] > 0:
+	def check_hover(self, mouse_pos):
+		if(
+				mouse_pos.x >= enemy_slot_positions[self.slot]
+			and mouse_pos.x <  enemy_slot_positions[self.slot] + 200
+			and mouse_pos.y >= 0
+			and mouse_pos.y <  screen_height
+		):
 			return True
 		else:
 			return False		
-	@property
-	def current_animation(self):
-		if self.current_action_index is None:
-			return self.idle_animation
-		else:
-			return self.action_animations[self.current_action_index]
-	@property
-	def action_finished(self):
-		if self.current_animation.finished:
-			return True
-		else:
-			return False
-	
-	def start_action(self, action_index):
-		if self.alive:
-			self.current_action_index = action_index
-	def draw(self, screen, mouse_pos, preview_action=None):
-		if self.alive:
-			x_pos = friendly_slot_positions[self.slot]
 
-			# Draws action point text
-			if self.action_points == 0:
-				text_color = c.grey
-			else:
-				text_color = c.white
-			draw_text(	screen=screen,
-						color=text_color,
-						pos=Vec(x_pos, friendly_ui_paddings[0]),
-						text=str(self.action_points),
-						font=main_font_5,
-						x_center=False)
+# class Friendly:
+# 	def __init__(self, slot, traits, idle_animation, hover_idle_animation):
+# 		self.max_values = copy(traits)
+# 		self.cur_values = copy(self.max_values)
+# 		self.slot = slot
+# 		self.team = 0
+# 		self.actions = []
+# 		self.action_points = 1
 
-			# Draw trait bars
-			cur_y_offset = 0 # Tracks y offset for consecutive stacked trait bars
-			for trait, max_value in self.max_values.items():
-				cur_trait = self.cur_values[trait]
-				preview_damage = 0
-				if preview_action is not None:
-					preview_damage = preview_action.damages[trait]
+# 		self.idle_animation = copy(idle_animation)
+# 		self.hover_idle_animation = copy(hover_idle_animation)
 
-				draw_healthbar(	screen, trait_colors[trait],
-								Vec(x_pos, friendly_ui_paddings[1] + cur_y_offset),
-								cur_trait, max_value, preview_damage)
+# 		self.action_animations = [] # Concurrent array to self.actions
+# 		self.action_buttons = [] # Concurrent array to self.actions
 
-				cur_y_offset += healthbar_height
+# 		self.current_action_index = None
+# 	def __deepcopy__(self, memo):
+# 		other = Friendly(	slot=self.slot,
+# 							traits=self.max_values,
+# 							idle_animation=self.idle_animation,
+# 							hover_idle_animation=self.hover_idle_animation)
 
-			# Draws sprite
-			self.current_animation.draw(screen=screen,
-										pos=Vec(x_pos, friendly_ui_paddings[2]))
+# 		other.actions = deepcopy(self.actions)
+# 		other.action_animations = deepcopy(self.action_animations)
+# 		other.action_buttons 
+# 	def add_action(self, action):
+# 		action.owner = self
+# 		self.actions.append(deepcopy(action))
+# 		self.action_animations.append(self.idle_animation)
+# 		self.action_buttons.append(ActionButton(pos=Vec(x=friendly_slot_positions[self.slot],
+# 														y=friendly_ui_paddings[3] + (len(self.actions)-1)*action_button_size.y),
+# 												linked_action=action))
+# 	def set_animation(self, action_index, animation):
+# 		if action_index > len(self.action_animations)-1:
+# 			print("Tried to set friendly animation for non-existent action.")
+# 			return
 
-			# Draws action buttons
-			if self.action_points > 0:
-				for button in self.action_buttons:
-					button.draw(screen=screen, hover=button.check_hover(mouse_pos=mouse_pos))
-			else:
-				for button in self.action_buttons:
-					button.draw(screen=screen, hover=False)
+# 		self.action_animations[action_index] = animation
+# 	@property
+# 	def rect(self):
+# 		rect = self.current_animation.rect
+# 		rect.pos += get_sprite_slot_pos(slot=self.slot, team=self.team)
+# 		return rect
+# 	@property
+# 	def alive(self):
+# 		if self.cur_values[T.Vigor] > 0:
+# 			return True
+# 		else:
+# 			return False		
+# 	@property
+# 	def current_animation(self):
+# 		if self.current_action_index is None:
+# 			return self.idle_animation
+# 		else:
+# 			return self.action_animations[self.current_action_index]
+# 	@property
+# 	def action_finished(self):
+# 		if self.current_animation.finished:
+# 			return True
+# 		else:
+# 			return False
+# 	def start_action(self, action_index):
+# 		if self.alive:
+# 			self.current_action_index = action_index
+# 	@property
+# 	def action_points(self):
+# 		return self._action_points
+# 	@action_points.setter
+# 	def action_points(self, value):
+# 		self._action_points = value
+# 		surface_size = main_font_5.size(str(value))
+# 		self.action_points_surface = Surface(Vec.fromtuple(surface_size))
+
+# 		# Draws action point text
+# 		if self.action_points == 0:
+# 			text_color = c.grey
+# 		else:
+# 			text_color = c.white
+# 		draw_text(	target=self.action_points_surface,
+# 					color=text_color,
+# 					pos=Vec(0,0),
+# 					text=str(self.action_points),
+# 					font=main_font_5,
+# 					x_center=False,
+# 					y_center=False)
+# 	def draw(self, target, mouse_pos, preview_action=None):
+# 		if self.alive:
+# 			x_pos = friendly_slot_positions[self.slot]
+
+# 			# Draw trait bars
+# 			cur_y_offset = 0 # Tracks y offset for consecutive stacked trait bars
+# 			for trait, max_value in self.max_values.items():
+# 				cur_trait = self.cur_values[trait]
+# 				preview_damage = 0
+# 				if preview_action is not None:
+# 					preview_damage = preview_action.damages[trait]
+
+# 				draw_healthbar(	target, trait_colors[trait],
+# 								Vec(x_pos, friendly_ui_paddings[1] + cur_y_offset),
+# 								cur_trait, max_value, preview_damage)
+
+# 				cur_y_offset += healthbar_height
+
+# 			# Draws action buttons
+# 			if self.action_points > 0:
+# 				for button in self.action_buttons:
+# 					button.draw(target=target, mouse_pos=mouse_pos)
+# 			else:
+# 				for button in self.action_buttons:
+# 					button.draw(target=target, mouse_pos=mouse_pos)
 
 def play_animation(kwargs):
 	game = kwargs['game']
@@ -516,7 +574,7 @@ class TargetSet(Enum):
 	All = 0
 	Self = 1
 	SingleAlly = 2
-	SingleAllyNotSelf = 3
+	OtherAlly = 3
 	AllAllies = 4
 	SingleEnemy = 5
 	AllEnemies = 6
@@ -524,15 +582,16 @@ class TargetSet(Enum):
 target_set_strings = {	TargetSet.All: "All",
 						TargetSet.Self: "Self",
 						TargetSet.SingleAlly: "Single Ally",
-						TargetSet.SingleAllyNotSelf: "Single Ally (Not Self)",
+						TargetSet.OtherAlly: "Other Ally",
 						TargetSet.SingleEnemy: "Single Enemy",
 						TargetSet.AllEnemies: "All Enemies",
 						TargetSet.AllAllies: "All Allies"}
 
 class Action:
-	def __init__(self, name, owner, target_set, required, damages):
+	def __init__(self, name, owner, target_set, required, damages, description=""):
 		self.sub_actions = []
 		self.name = name
+		self.description = description
 		self.owner = owner
 		self.target_set = target_set
 		self.required = required
@@ -540,70 +599,162 @@ class Action:
 	def add_sub_action(self, sub_action):
 		self.sub_actions.append(sub_action)
 	def can_use(self, user_traits):
+		valid_target = False
+
+		if self.target_set == TargetSet.OtherAlly:
+			for ally in game.state.get_allies(team=self.owner.team):
+				if ally.alive == True and ally != self.owner:
+					valid_target = True
+		else:
+			valid_target = True
+
+		if valid_target == False:
+			return False
 		for trait, value in user_traits.items():
 			if value < self.required[trait]:
 				return False
 		return True		
 	def execute(self, user_traits, kwargs={}):
-		if self.can_use(user_traits) == True:
+		if self.can_use(user_traits=user_traits) == True:
 			for sub_action in self.sub_actions:
 				sub_action(**kwargs)
 			return True
 		else:
 			return False
-		
 
-action_button_size =  Vec(175,100)
+action_button_size =  Vec(150,60)
+action_info_size = Vec(200,70)
 class ActionButton:
 	def __init__(self, pos, linked_action):
 		self.pos = pos
 		self.size = action_button_size
 		self.linked_action = linked_action
-	def draw(self, screen, hover):
-		if hover:
-			border_color = c.red
-			text_color = c.white
-		else:
-			border_color = c.grey
-			text_color = c.grey
 
-		padding = Vec(20,20) # Padding between upper left corner and text for action and target set text.
+		self.surface = None
+		self.hover_surface = None
+		self.unable_surface = None # Surface if action requirements aren't mean
+		self.info_box_surface = None
+		self.refresh_surfaces()
+	@property
+	def owner(self):
+		return self.linked_action.owner
+	def refresh_surfaces(self):
+		# Non-hovered surface
+		back_color = c.dkgrey
+		border_color = c.grey
+		text_color = c.grey
 
-		# Button border
-		draw_rect(screen, border_color, self.pos, self.size, 1)
+		self.surface = Surface(self.size)
+
+		# Button background and border
+		draw_rect(target=self.surface, color=back_color, pos=Vec(0,0), size=self.size, width=0)
+		draw_rect(target=self.surface, color=border_color, pos=Vec(0,0), size=self.size, width=1)
 
 		# Action name text
-		prev_line = draw_text(	screen=screen, color=text_color, pos=self.pos + padding,
-								text=self.linked_action.name, x_center=False, y_center=False, font=main_font_5_u)
+		prev_line = draw_text(	target=self.surface, color=text_color, pos=Vec(action_button_size.x/2, 0),
+								text=self.linked_action.name, x_center=True, y_center=False, font=main_font_5_u)
 		prev = prev_line
 		for trait, required in self.linked_action.required.items():
 			if required != 0:
-				s = require_surfaces[trait]
-				prev = draw_surface(screen=screen, pos=prev.center_right+Vec(s.get_width()/2 + 8, 0), surface=require_surfaces[trait],
-									x_align=AlignX.Center, y_align=AlignY.Center)
-				draw_text(	screen=screen, color=c.white, pos=prev.center,
-							text=str(required), x_center=True, y_center=True, font=main_font_10)
-				if(self.linked_action.owner.cur_values[trait] < required):
-					draw_x(screen=screen, color=c.grey, rect=prev)
+				pass
+				#s = require_surfaces[trait]
+				# Required trait image next to skill name
+				# prev = draw_surface(target=self.surface, pos=prev.center_right+Vec(s.get_width()/2 + 8, 0), surface=require_surfaces[trait],
+				# 					x_align=AlignX.Center, y_align=AlignY.Center)
+				# Required trait text (i.e., amount required) on top of each req. trait image
+				# draw_text(	target=self.surface, color=c.white, pos=prev.center,
+				# 			text=str(required), x_center=True, y_center=True, font=main_font_10)
+
+				# X out the trait if the owner doesn't fulfill that requirement
+				# if(self.linked_action.owner.cur_values[trait] < required):
+				# 	draw_x(target=self.surface, color=c.grey, rect=prev)
 
 		# Target set text
-		prev = draw_text(	screen=screen, color=text_color, pos=prev_line.bottom_left, text=target_set_strings[self.linked_action.target_set],
-							x_center=False, y_center=False, font=main_font_4)
+		# prev = draw_text(	target=self.surface, color=text_color, pos=prev_line.bottom_left, text=target_set_strings[self.linked_action.target_set],
+		# 					x_center=False, y_center=False, font=main_font_4)
 
 		# Trait sword icons and overlay'd damage text for the action
 		for trait, damage in self.linked_action.damages.items():
 			if damage != 0:
-				prev = draw_surface(screen, prev.bottom_left, sword_surfaces[trait])
-				draw_text(screen, c.white, prev.center, str(self.linked_action.damages[trait]), font=main_font_7)				
+				prev = draw_surface(target=self.surface, pos=prev.center_bottom, surface=sword_surfaces[trait], x_align=AlignX.Center)
+				draw_text(target=self.surface, color=c.white, pos=prev.center, text=str(self.linked_action.damages[trait]), font=main_font_7)
+
+		# Hovered surface
+		hover_back_color = c.ltgrey
+		hover_border_color = c.red
+		hover_text_color = c.white	
+
+		self.hover_surface = Surface(self.size)
+
+		# Button background and border
+		draw_rect(target=self.hover_surface, color=hover_back_color, pos=Vec(0,0), size=self.size, width=0)
+		draw_rect(target=self.hover_surface, color=hover_border_color, pos=Vec(0,0), size=self.size, width=1)
+
+		# Action name text
+		prev_line = draw_text(	target=self.hover_surface, color=hover_text_color, pos=Vec(action_button_size.x/2, 0),
+								text=self.linked_action.name, x_center=True, y_center=False, font=main_font_5_u)
+		prev = prev_line
+		for trait, required in self.linked_action.required.items():
+			if required != 0:
+				pass
+				#s = require_surfaces[trait]
+				# Required trait image next to skill name
+				# prev = draw_surface(target=self.hover_surface, pos=prev.center_right+Vec(s.get_width()/2 + 8, 0), surface=require_surfaces[trait],
+				# 					x_align=AlignX.Center, y_align=AlignY.Center)
+				# Required trait text (i.e., amount required) on top of each req. trait image
+				# draw_text(	target=self.hover_surface, color=hover_c.white, pos=prev.center,
+				# 			text=str(required), x_center=True, y_center=True, font=main_font_10)
+
+				# X out the trait if the owner doesn't fulfill that requirement
+				# if(self.linked_action.owner.cur_values[trait] < required):
+				# 	draw_x(target=self.hover_surface, color=hover_c.grey, rect=prev)
+
+		# Target set text
+		# prev = draw_text(	target=self.hover_surface, color=hover_text_color, pos=prev_line.bottom_left, text=target_set_strings[self.linked_action.target_set],
+		# 					x_center=False, y_center=False, font=main_font_4)
+
+		# Trait sword icons and overlay'd damage text for the action
+		for trait, damage in self.linked_action.damages.items():
+			if damage != 0:
+				prev = draw_surface(target=self.hover_surface, pos=prev.center_bottom, surface=sword_surfaces[trait], x_align=AlignX.Center)
+				draw_text(target=self.hover_surface, color=c.white, pos=prev.center, text=str(self.linked_action.damages[trait]), font=main_font_7)
+
+		# Info box surface
+		self.info_box_surface = Surface(action_info_size)
+
+		# Background box and border
+		draw_rect(target=self.info_box_surface, color=[50]*3, pos=Vec(0,0), size=action_info_size, width=0)
+		draw_rect(target=self.info_box_surface, color=c.white, pos=Vec(0,0), size=action_info_size, width=1)
+		prev=draw_text(	target=self.info_box_surface, color=c.white, pos=Vec(action_info_size.x/2, 0),
+						text=self.linked_action.name, font=main_font_5_u, x_center=True, y_center=False)
+		#target, text, pos, font, color=c.white, word_wrap_width=None):
+		prev=draw_text_wrapped(	target=self.info_box_surface, color=c.white, pos=Vec(action_info_size.x*0.1, prev.bottom),
+								text=self.linked_action.description, font=main_font_4, word_wrap_width=action_info_size.x*0.9)
+
+		# Unable Surface
+		self.unable_surface = copy(self.surface)
+		draw_x(target=self.unable_surface, color=c.red, rect=Rect(pos=Vec(0,0), size=action_button_size))
+
+	def draw_info_box(self, mouse_pos):
+		game.queue_surface(surface=self.info_box_surface, depth=10, pos=mouse_pos)
+	def draw(self, target, mouse_pos, force_highlight=False):
+		if self.linked_action.can_use(user_traits=self.owner.cur_values) == False:
+			game.queue_surface(depth=20, surface=self.unable_surface, pos=self.pos)
+		elif self.check_hover(mouse_pos=mouse_pos) == True or force_highlight == True:
+			game.queue_surface(depth=20, surface=self.hover_surface, pos=self.pos)
+			if self.owner.team == 0:
+				self.draw_info_box(mouse_pos=mouse_pos)
+		else:
+			game.queue_surface(depth=20, surface=self.surface, pos=self.pos)			
 
 		# Return extent of drawn button
 		return self.rect
 	def check_hover(self, mouse_pos):
 		if(
-				mouse_pos.x > self.pos.x
-			and mouse_pos.x < self.pos.x + self.size.x
-			and mouse_pos.y > self.pos.y
-			and mouse_pos.y < self.pos.y + self.size.y
+				mouse_pos.x >= self.pos.x
+			and mouse_pos.x <  self.pos.x + self.size.x
+			and mouse_pos.y >= self.pos.y
+			and mouse_pos.y <  self.pos.y + self.size.y
 		):
 			return True
 		else:
@@ -612,6 +763,20 @@ class ActionButton:
 	@property
 	def rect(self):
 		return Rect(self.pos, self.size)
+
+	def __deepcopy__(self, memo):
+		# TODO: Should action buttons ever really be copy'd or deepcopy'd? Almost everything
+		# 		has to be changed anyway.
+		# self.pos = pos
+		# self.size = action_button_size
+		# self.linked_action = linked_action
+		# self.surface = None
+		# self.hover_surface = None
+		# self.refresh_surfaces()
+		other = ActionButton(	pos=self.pos,
+								linked_action=self.linked_action)
+
+
 	
 
 class Turn:
@@ -689,47 +854,144 @@ def enemy_is_valid_target(action, target):
 
 	return False
 
-class Game:
+class BattleState:
 	def __init__(self):
-		pg.init()
-		self.screen = pg.display.set_mode((screen_width, screen_height))
-
-		self.turn = Turn(True)
+		self.turn = Turn(initial_active=True)
 		# action_state represents what action the play is currently doing (after clicking a card, it might be "targeting")
 		self.action_state = "Action Select"
 		self.target_start_pos = Vec(0,0)
 		#self.selected_action = None
 		self.selected_action_button = None
 
-		self.active_timers = []
-		self.active_animations = []
-
 		self.friendlies = []
-		self.friendlies.append(Friendly(slot=0,
-										traits={T.Vigor:50, T.Armor:10, T.Focus:5},
-										idle_animation=FullAnimation(	sprites=[character_surface],
-																		sprite_lengths=[1],
-																		anchor_points=[Vec(0,character_surface.get_height())]),
-										hover_idle_animation=FullAnimation(	sprites=[character_highlighted_surface],
+		self.enemies = []
+
+		# Set up warrior and put in slot 0
+		warrior_schematic = UnitSchematic(	name="Warrior",
+											traits={T.Vigor:50, T.Armor:10, T.Focus:5},
+											idle_animation=FullAnimation(	sprites=[character_surface],
 																			sprite_lengths=[1],
-																			anchor_points=[Vec(0,character_highlighted_surface.get_height())])
-										)
-									)
-		self.friendlies.append(Friendly(slot=1,
-										traits={T.Vigor:35, T.Armor:5, T.Focus:8},
-										idle_animation=FullAnimation(	sprites=[character_surface],
-																		sprite_lengths=[1],
-																		anchor_points=[Vec(0,character_surface.get_height())]),
-										hover_idle_animation=FullAnimation(	sprites=[character_highlighted_surface],
-																			sprite_lengths=[1],
-																			anchor_points=[Vec(0,character_highlighted_surface.get_height())])
-										)		
-									)
+																			anchor_points=[Vec(0,character_surface.height)]),
+											hover_idle_animation=FullAnimation(	sprites=[character_highlighted_surface],
+																				sprite_lengths=[1],
+																				anchor_points=[Vec(0,character_highlighted_surface.height)])
+							)
+
+		rest_action = Action(	name="Rest",
+								description="Restores 2 vigor to self.",				
+								owner=None,
+								target_set=TargetSet.Self,
+								required={T.Vigor:0, T.Focus:0, T.Armor:0}, 
+								damages={T.Vigor:-2, T.Focus:0, T.Armor:0})
+		rest_action.add_sub_action(lambda source, targets: deal_damage(kwargs={	'source': source,
+																				'targets': targets, 
+																				'damages': rest_action.damages}))
+
+		# Strike
+		med_strike_action = Action(	name="Medium Strike",
+									description="Deals 5 vigor damage to target. Requires 2 vigor.",
+									owner=None,
+									target_set=TargetSet.SingleEnemy,
+									required={T.Vigor:2, T.Focus:0, T.Armor:0},
+									damages={T.Vigor:5, T.Focus:0, T.Armor:0})
+		med_strike_action.add_sub_action(lambda source, targets: deal_damage(kwargs={	'source': source,
+																						'targets': targets, 
+																						'damages': med_strike_action.damages}))
+
+		# Intimidate
+		intimidate_action = Action(	name="Intimidate",
+									description="Deals 5 focus damage to target. Requires 1 focus.",				
+									owner=None,
+									target_set=TargetSet.SingleEnemy,
+									required={T.Vigor:0, T.Focus:1, T.Armor:0},
+									damages={T.Vigor:0, T.Focus:5, T.Armor:0})
+		intimidate_action.add_sub_action(lambda source, targets: deal_damage(kwargs={	'source': source,
+																						'targets': targets, 
+																						'damages': intimidate_action.damages}))
+
+		# Bash
+		med_bash_action = Action(	name="Medium Bash",
+									description="Deals 4 armor damage to target. Requires 1 focus.",				
+									owner=None,
+									target_set=TargetSet.SingleEnemy,
+									required={T.Vigor:0, T.Focus:1, T.Armor:0},
+									damages={T.Vigor:0, T.Focus:0, T.Armor:4})
+		med_bash_action.add_sub_action(lambda source, targets: deal_damage(kwargs={	'source': source,
+																					'targets': targets, 
+																					'damages': med_bash_action.damages}))
+
+		warrior_schematic.add_action(rest_action)
+		warrior_schematic.add_action(med_strike_action)
+		warrior_schematic.add_action(intimidate_action)
+		warrior_schematic.add_action(med_bash_action)
+
+		rest_animation_length = 60
+		rest_sprite_animation = FullAnimation(	#end_pos=Vec(0,30),
+												#jerk=1.0,
+												#tweens=[Tween(end_pos=Vec(0,30), jerk=1.0, duration=rest_animation_length)]
+												duration=rest_animation_length,
+												sprites=[character_highlighted_surface],
+												sprite_lengths=[rest_animation_length],
+												anchor_points=[Vec(0, character_highlighted_surface.height)])
+		warrior_schematic.set_animation(	action_index=0,
+											animation=rest_sprite_animation)
+
+		med_strike_animation_length = 60
+		med_strike_sprite_animation = FullAnimation(#end_pos=Vec(100,0),
+												#jerk=5.0,
+												duration=med_strike_animation_length,
+												sprites=[character_surface],
+												sprite_lengths=[med_strike_animation_length],
+												anchor_points=[Vec(0, character_surface.height)])
+		warrior_schematic.set_animation(	action_index=1,
+											animation=med_strike_sprite_animation)
+
+		intimidate_animation_length = 60
+		intimidate_sprite_animation = FullAnimation(#end_pos=Vec(-20,0),
+													#jerk=0.7,
+													duration=intimidate_animation_length,
+													sprites=[character_surface],
+													sprite_lengths=[intimidate_animation_length],
+													anchor_points=[Vec(0, character_surface.height)])
+		warrior_schematic.set_animation(	action_index=2,
+											animation=intimidate_sprite_animation)
+
+		bash_animation_length = 60
+		bash_sprite_animation = FullAnimation(#end_pos=Vec(100,0),
+											#		jerk=0.5,												
+													duration=bash_animation_length,
+													sprites=[character_surface],
+													sprite_lengths=[bash_animation_length],
+													anchor_points=[Vec(0, character_surface.height)])
+		warrior_schematic.set_animation(	action_index=3,
+											animation=bash_sprite_animation)
+
+		with open("warrior_test.dat", "w") as f:
+			f.write(warrior_schematic.serialize())
 
 
-		for friendly in self.friendlies:
+		# self.friendlies.append(
+		# self.friendlies.append(Friendly(slot=1,
+		# 								traits={T.Vigor:35, T.Armor:5, T.Focus:8},
+		# 								idle_animation=FullAnimation(	sprites=[character_surface],
+		# 																sprite_lengths=[1],
+		# 																anchor_points=[Vec(0,character_surface.height)]),
+		# 								hover_idle_animation=FullAnimation(	sprites=[character_highlighted_surface],
+		# 																	sprite_lengths=[1],
+		# 																	anchor_points=[Vec(0,character_highlighted_surface.height)])
+		# 								)		
+		# 							)
+
+
+		# Slot 0 friendly skills/animations
+		# for friendly in [self.friendlies[0]]:
+			# Res
+
+		# Slot 1 Friendly skills/animations
+		for friendly in [self.friendlies[1]]:
 			# Rest
 			rest_action = Action(	name="Rest",
+									description="Restores 2 vigor to self.",				
 									owner=None,
 									target_set=TargetSet.Self,
 									required={T.Vigor:0, T.Focus:0, T.Armor:0}, 
@@ -739,17 +1001,19 @@ class Game:
 																					'damages': rest_action.damages}))
 
 			# Strike
-			strike_action = Action(	name="Strike",
+			light_strike_action = Action(	name="Light Strike",
+									description="Deals 2 vigor damage to target. Requires 5 vigor.",
 									owner=None,
 									target_set=TargetSet.SingleEnemy,
 									required={T.Vigor:5, T.Focus:0, T.Armor:0},
 									damages={T.Vigor:2, T.Focus:0, T.Armor:0})
-			strike_action.add_sub_action(lambda source, targets: deal_damage(kwargs={	'source': source,
+			light_strike_action.add_sub_action(lambda source, targets: deal_damage(kwargs={	'source': source,
 																						'targets': targets, 
-																						'damages': strike_action.damages}))
+																						'damages': light_strike_action.damages}))
 
 			# Intimidate
 			intimidate_action = Action(	name="Intimidate",
+										description="Deals 5 focus damage to target. Requires 1 focus.",				
 										owner=None,
 										target_set=TargetSet.SingleEnemy,
 										required={T.Vigor:0, T.Focus:1, T.Armor:0},
@@ -759,19 +1023,20 @@ class Game:
 																							'damages': intimidate_action.damages}))
 
 			# Bash
-			bash_action = Action(	name="Bash",
+			light_bash_action = Action(	name="Light Bash",
+									description="Deals 2 armor damage to target. Requires 1 focus.",				
 									owner=None,
 									target_set=TargetSet.SingleEnemy,
 									required={T.Vigor:0, T.Focus:1, T.Armor:0},
 									damages={T.Vigor:0, T.Focus:0, T.Armor:2})
-			bash_action.add_sub_action(lambda source, targets: deal_damage(kwargs={	'source': source,
+			light_bash_action.add_sub_action(lambda source, targets: deal_damage(kwargs={	'source': source,
 																					'targets': targets, 
-																					'damages': bash_action.damages}))
+																					'damages': light_bash_action.damages}))
 
 			friendly.add_action(rest_action)
-			friendly.add_action(strike_action)
+			friendly.add_action(light_strike_action)
 			friendly.add_action(intimidate_action)
-			friendly.add_action(bash_action)
+			friendly.add_action(light_bash_action)
 
 			rest_animation_length = 60
 			rest_sprite_animation = FullAnimation(	#end_pos=Vec(0,30),
@@ -780,19 +1045,19 @@ class Game:
 													duration=rest_animation_length,
 													sprites=[character_highlighted_surface],
 													sprite_lengths=[rest_animation_length],
-													anchor_points=[Vec(0, character_highlighted_surface.get_height())])
+													anchor_points=[Vec(0, character_highlighted_surface.height)])
 			friendly.set_animation(	action_index=0,
 									animation=rest_sprite_animation)
 
-			strike_animation_length = 60
-			strike_sprite_animation = FullAnimation(#end_pos=Vec(100,0),
+			light_strike_animation_length = 60
+			light_strike_sprite_animation = FullAnimation(#end_pos=Vec(100,0),
 													#jerk=5.0,
-													duration=strike_animation_length,
+													duration=light_strike_animation_length,
 													sprites=[character_surface],
-													sprite_lengths=[strike_animation_length],
-													anchor_points=[Vec(0, character_surface.get_height())])
+													sprite_lengths=[light_strike_animation_length],
+													anchor_points=[Vec(0, character_surface.height)])
 			friendly.set_animation(	action_index=1,
-									animation=strike_sprite_animation)
+									animation=light_strike_sprite_animation)
 
 			intimidate_animation_length = 60
 			intimidate_sprite_animation = FullAnimation(#end_pos=Vec(-20,0),
@@ -800,32 +1065,33 @@ class Game:
 														duration=intimidate_animation_length,
 														sprites=[character_surface],
 														sprite_lengths=[intimidate_animation_length],
-														anchor_points=[Vec(0, character_surface.get_height())])
+														anchor_points=[Vec(0, character_surface.height)])
 			friendly.set_animation(	action_index=2,
 									animation=intimidate_sprite_animation)
 
-			bash_animation_length = 60
-			bash_sprite_animation = FullAnimation(#end_pos=Vec(100,0),
+			light_bash_animation_length = 60
+			light_bash_sprite_animation = FullAnimation(#end_pos=Vec(100,0),
 												#		jerk=0.5,												
-														duration=bash_animation_length,
+														duration=light_bash_animation_length,
 														sprites=[character_surface],
-														sprite_lengths=[bash_animation_length],
-														anchor_points=[Vec(0, character_surface.get_height())])
+														sprite_lengths=[light_bash_animation_length],
+														anchor_points=[Vec(0, character_surface.height)])
 			friendly.set_animation(	action_index=3,
-									animation=bash_sprite_animation)			
+									animation=light_bash_sprite_animation)		
 
 
 		# START: Wolf schematic
 		wolf_schematic = EnemySchematic(	traits={T.Vigor:4, T.Armor:0, T.Focus:4}, 
 											idle_animation=FullAnimation(	sprites=[wolf_enemy_surface],
 																			sprite_lengths=[1],
-																			anchor_points=[Vec(0,wolf_enemy_surface.get_height())]),
+																			anchor_points=[Vec(0,wolf_enemy_surface.height)]),
 											hover_idle_animation=FullAnimation(	sprites=[wolf_enemy_highlighted_surface],
 																				sprite_lengths=[1],
-																				anchor_points=[Vec(0,wolf_enemy_highlighted_surface.get_height())])
+																				anchor_points=[Vec(0,wolf_enemy_highlighted_surface.height)])
 											)
 		# Bite
 		bite_action = Action(	name="Bite",
+								description="Deals 4 vigor damage to target. Requires 4 focus.",			
 								owner=None,
 								target_set=TargetSet.SingleEnemy,
 								required={T.Vigor:0, T.Focus:4, T.Armor:0},
@@ -852,7 +1118,7 @@ class Game:
 												duration=bite_animation_length,
 												sprites=[wolf_enemy_surface],
 												sprite_lengths=[bite_animation_length],
-												anchor_points=[Vec(0, wolf_enemy_surface.get_height())])
+												anchor_points=[Vec(0, wolf_enemy_surface.height)])
 		wolf_schematic.set_animation(	action_index=0,
 										animation=bite_sprite_animation)
 
@@ -861,7 +1127,7 @@ class Game:
 												duration=howl_animation_length,
 												sprites=[wolf_enemy_howl_surface],
 												sprite_lengths=[howl_animation_length],
-												anchor_points=[Vec(0, wolf_enemy_howl_surface.get_height())])
+												anchor_points=[Vec(0, wolf_enemy_howl_surface.height)])
 		wolf_schematic.set_animation(	action_index=1,
 										animation=howl_sprite_animation)
 		# END: Wolf schematic
@@ -870,10 +1136,10 @@ class Game:
 		human_schematic = EnemySchematic(	traits={T.Vigor:4, T.Armor:10, T.Focus:4}, 
 											idle_animation=FullAnimation(	sprites=[human_surface],
 																			sprite_lengths=[1],
-																			anchor_points=[Vec(0,human_surface.get_height())]),
+																			anchor_points=[Vec(0,human_surface.height)]),
 											hover_idle_animation=FullAnimation(	sprites=[human_highlighted_surface],
 																				sprite_lengths=[1],
-																				anchor_points=[Vec(0,human_highlighted_surface.get_height())])
+																				anchor_points=[Vec(0,human_highlighted_surface.height)])
 											)
 		# Heal
 		heal_action = Action(	name="Heal",
@@ -886,9 +1152,9 @@ class Game:
 																				'damages': heal_action.damages}))
 
 		# Armor
-		armor_action = Action(	name="Armor",
+		armor_action = Action(	name="Rig Up",
 								owner=None,
-								target_set=TargetSet.SingleAllyNotSelf,
+								target_set=TargetSet.OtherAlly,
 								required={T.Vigor:0, T.Focus:0, T.Armor:1},
 								damages={T.Vigor:0, T.Focus:0, T.Armor:-1})
 		armor_action.add_sub_action(lambda source, targets: deal_damage(kwargs={'source': source,
@@ -898,6 +1164,17 @@ class Game:
 																				'targets': TargetSet.Self, 
 																				'damages': {T.Vigor:0, T.Armor:1, T.Focus:0}}))
 
+		# Attack
+		attack_action = Action(	name="Attack",
+								owner=None,
+								target_set=TargetSet.SingleEnemy,
+								required={T.Vigor:0, T.Focus:2, T.Armor:0},
+								damages={T.Vigor:3, T.Focus:0, T.Armor:0})
+		attack_action.add_sub_action(lambda source, targets: deal_damage(kwargs={'source': source,
+																				'targets': targets, 
+																				'damages': attack_action.damages}))		
+
+		human_schematic.add_action(attack_action)
 		human_schematic.add_action(heal_action)
 		human_schematic.add_action(armor_action)
 
@@ -907,8 +1184,8 @@ class Game:
 											duration=animation_length,
 											sprites=[human_surface],
 											sprite_lengths=[animation_length],
-											anchor_points=[Vec(0, human_surface.get_height())])
-		human_schematic.set_animation(	action_index=0,
+											anchor_points=[Vec(0, human_surface.height)])
+		human_schematic.set_animation(	action_index=1,
 										animation=sprite_animation)
 
 		# Armor Animation
@@ -918,62 +1195,31 @@ class Game:
 											duration=animation_length,
 											sprites=[human_surface],
 											sprite_lengths=[animation_length],
-											anchor_points=[Vec(0, human_surface.get_height())])
-		human_schematic.set_animation(	action_index=1,
-										animation=sprite_animation)	
+											anchor_points=[Vec(0, human_surface.height)])
+		human_schematic.set_animation(	action_index=2,
+										animation=sprite_animation)
+
+		# Attack Animation
+		animation_length = 60
+		sprite_animation = FullAnimation(	tweens=[Tween(end_pos=Vec(-100,0), jerk=0.2, duration=55),
+													Tween(start_pos=Vec(-100,0), end_pos=Vec(0,0), jerk=1.0, duration=5)],
+											duration=animation_length,
+											sprites=[human_surface],
+											sprite_lengths=[animation_length],
+											anchor_points=[Vec(0, human_surface.height)])
+		human_schematic.set_animation(	action_index=0,
+										animation=sprite_animation)			
 		# END: Human schematic
 
-
-		self.enemies = []
 		self.enemies.append(Enemy(slot=0, schematic=wolf_schematic))
 		self.enemies.append(Enemy(slot=1, schematic=wolf_schematic))
 		self.enemies.append(Enemy(slot=2, schematic=human_schematic))
-
-
-		self.left_mouse_clicked = False
-		self.right_mouse_clicked = False
-		self.game_clock = pg.time.Clock()
-		self.input = InputState(	p_keys=None, keys=None,
-									p_buttons=None, buttons=None,
-									keypress_delay_interval=15, keypress_repeat_interval=3)
-
-		if len(sys.argv) >= 2 and sys.argv[1] == '-d':
-			debug.debugger = debug.DebugUI(game=self, active=True)
-
-	def draw(self):
-		for data in self.active_animations:
-			data['animation'].draw(screen=self.screen, pos=data['pos'])
-
-	def any_key_pressed(self, input_state):
-		pass
-
-	def update(self, df=1, mouse_pos=(0,0)):
-		for event in pg.event.get():
-			if event.type == pg.QUIT:
-				sys.exit()
-			elif event.type == pg.KEYDOWN:
-				self.input.set_repeat_key(event.key)
-			elif event.type == pg.KEYUP:
-				self.input.unset_repeat_key(event.key)
-
-		# Update
-		for data in self.active_animations:
-			data['animation'].update()
-
-		# Remove finished animations from active_animations
-		self.active_animations = [e for e in self.active_animations if e['animation'].finished == False]
-
-		self.input.next_state(new_keys=pg.key.get_pressed(), new_buttons=pg.mouse.get_pressed())
-		self.input.update(df=1)
-		self.any_key_pressed(input_state=self.input)
-		#mouse_buttons = pg.mouse.get_pressed()
-		mouse_x, mouse_y = pg.mouse.get_pos()
-		mouse_pos = Vec(mouse_x, mouse_y)
-
+		self.enemies.append(Enemy(slot=3, schematic=human_schematic))		
+	def update(self, mouse_pos):
 		if self.turn.player_active:
-			if self.input.pressed(key=pg.K_q):
+			if game.input.pressed(key=pg.K_q):
 				self.turn.end_turn(friendlies=self.friendlies, enemies=self.enemies)
-			if self.input.pressed(button=0): # Left mouse pressed
+			if game.input.pressed(button=0): # Left mouse pressed
 				if self.action_state == "Action Select":
 					for friendly in self.friendlies:
 						if friendly.action_points > 0:
@@ -1029,21 +1275,14 @@ class Game:
 
 					self.action_state = "Action Select"
 
-			if self.input.pressed(button=2): # Right mouse pressed
+			if game.input.pressed(button=2): # Right mouse pressed
 				if self.action_state == "Target Select":
-					self.action_state = "Action Select"
+					self.action_state = "Action Select"		
 
-		for i, timer in enumerate(self.active_timers):
-			finished = timer.tick()
-			if finished:
-				del self.active_timers[i]
-
-		# Update game objects
 		self.turn.update(friendlies=self.friendlies, enemies=self.enemies)
 		for enemy in self.enemies:
 			enemy.update()
 
-		# Calculate the hovered target set for slot highlighting
 		previewed_target_set = []
 		if self.action_state == "Target Select":
 			action = self.selected_action_button.linked_action
@@ -1083,76 +1322,162 @@ class Game:
 
 		# End turn if action points are at 0 for all allies
 		if self.turn.player_active == True:
-			all_action_points_exhausted = True
-			for friendly in self.friendlies:
-				if friendly.action_points > 0:
-					all_action_points_exhausted = False
-			if all_action_points_exhausted == True:
-				self.turn.end_turn(friendlies=self.friendlies, enemies=self.enemies)
-
-
-		self.screen.fill(c.dkgrey)
+			if len([e for e in self.friendlies if e.action_points > 0]) == 0:
+				self.turn.end_turn(friendlies=self.friendlies, enemies=self.enemies)			
 
 		# Draw friendlies
 		for friendly in self.friendlies:
 			if friendly in previewed_target_set and self.action_state == "Target Select":
-				friendly.draw(screen=self.screen, mouse_pos=mouse_pos, preview_action=action)
-				highlight_surface = pg.Surface((200,screen_height))
+				friendly.draw(target=game.screen, mouse_pos=mouse_pos, preview_action=action)
+				highlight_surface = Surface(Vec(200,screen_height))
 				highlight_surface.set_alpha(30)
 				highlight_surface.fill(c.white)
-				self.screen.blit(highlight_surface, (friendly_slot_positions[friendly.slot], 0))
+				draw_surface(	target=game.screen,
+								surface=highlight_surface,
+								pos=Vec(friendly_slot_positions[friendly.slot], 0))
 			else:
-				back_surface = pg.Surface((200,screen_height))
+				back_surface = Surface(Vec(200,screen_height))
 				back_surface.set_alpha(20)
 				back_surface.fill(c.white)
 
-				#self.screen.blit(back_surface, (friendly_slot_positions[friendly.slot], 0))
-
 				if self.turn.player_active == True:
-					highlight_surface = pg.Surface((200,screen_height))
+					highlight_surface = Surface(Vec(200,screen_height))
 					highlight_surface.set_alpha(30)
 					if friendly.action_points == 0:
 						highlight_surface.fill(c.red)
 					else:
 						highlight_surface.fill(c.green)
 
-					self.screen.blit(highlight_surface, (friendly_slot_positions[friendly.slot], 0))
-				friendly.draw(screen=self.screen, mouse_pos=mouse_pos)
-
-
-
+					draw_surface(	target=game.screen,
+									surface=highlight_surface,
+									pos=Vec(friendly_slot_positions[friendly.slot], 0))
+				friendly.draw(target=game.screen, mouse_pos=mouse_pos)
 
 		# Draw enemies
 		for enemy in self.enemies:
 			if enemy.alive == False:
 				continue
 			if enemy in previewed_target_set and self.action_state == "Target Select":
-				enemy.draw(screen=self.screen, hover=True, preview_action=action)
-				highlight_surface = pg.Surface((200,screen_height))
+				enemy.draw(target=game.screen, mouse_pos=mouse_pos, preview_action=action)
+				highlight_surface = Surface(Vec(200,screen_height))
 				highlight_surface.set_alpha(30)
 				highlight_surface.fill(c.white)
-				self.screen.blit(highlight_surface, (enemy_slot_positions[enemy.slot], 0))				
+				draw_surface(	target=game.screen,
+								surface=highlight_surface,
+								pos=Vec(enemy_slot_positions[enemy.slot], 0))
 			else:
-				enemy.draw(screen=self.screen, hover=False)
+				enemy.draw(target=game.screen, mouse_pos=mouse_pos)
 
 		if self.action_state == "Target Select":
-			# targeting line/arrow
-			draw_line(	screen=self.screen,
+			# Targeting line/arrow
+			# width = abs(mouse_pos.x - self.selected_action_button.rect.center_right.x)
+			# height = abs(mouse_pos.y - self.selected_action_button.rect.center_right.y)
+			surface = Surface(size=Vec(screen_width, screen_height))
+			surface.set_colorkey(c.pink)
+			surface.fill(c.pink)
+			draw_line(	target=surface,
 						color=c.white,
 						start=self.selected_action_button.rect.center_right,
 						end=mouse_pos)
 
+			game.queue_surface(surface=surface, depth=5, pos=Vec(0,0))				
+	def get_allies(self, team):
+		if team == 0:
+			return self.friendlies
+		if team == 1:
+			return self.enemies
+	def get_enemies(self, team):
+		if team == 0:
+			return self.enemies
+		if team == 1:
+			return self.friendlies	
 
-		for timer in self.active_timers:
-			draw_text(self.screen, c.white, Vec(10,10), "{:.1f} s".format(timer.time_remaining), x_center=False, y_center=False)
+class Game:
+	def __init__(self):
+		pg.init()
+		self.screen = Surface.from_pgsurface(pg.display.set_mode((screen_width, screen_height)))
 
+		self.state = BattleState()
+		self.active_animations = []
+		self.draw_queue = []
+		self.game_clock = pg.time.Clock()
+		self.input = InputState(	p_keys=None, keys=None,
+									p_buttons=None, buttons=None,
+									keypress_delay_interval=15, keypress_repeat_interval=3)
+
+		# Activate debug mode if terminal line flag '-d' is given
+		if len(sys.argv) >= 2 and sys.argv[1] == '-d':
+			debug.debugger = debug.DebugUI(game=self, active=True)
+	def draw(self):
+		# Clear screen
+		self.screen.fill(c.dkgrey)
+
+		# Sort drawing queue by depth
+		self.draw_queue.sort(key=lambda x: x[0], reverse=True)
+
+		# Draw each surface in draw_queue at its position
+		for e in self.draw_queue:
+			surface = e[1]
+			pos = e[2]
+			draw_surface(	target=self.screen,
+							surface=surface,
+							pos=pos)
+
+		# Draw each animation in active_animation at its position
+		for data in self.active_animations:
+			data['animation'].draw(target=self.screen, pos=data['pos'])
+
+		# Draw FPS text in top left corner
+		draw_text(	target=self.screen, color=c.green,
+					pos=Vec(4,4), text="{:.2f}".format(self.game_clock.get_fps()),
+					font=main_font_5, x_center=False, y_center=False)
+
+		# Flip buffer to display
+		pg.display.flip()
+	def any_key_pressed(self, input_state):
+		pass
+	def update(self, df=1, mouse_pos=(0,0)): # TODO: mouse_pos, esp. with default arg, doesn't need to be here
+		# Handle window events
+		for event in pg.event.get():
+			if event.type == pg.QUIT:
+				sys.exit()
+			elif event.type == pg.KEYDOWN:
+				self.input.set_repeat_key(event.key)
+			elif event.type == pg.KEYUP:
+				self.input.unset_repeat_key(event.key)
+
+		# Clear draw queue for this frame
+		self.draw_queue = []		
+
+		# Tick all animations in active_animations
+		# If any animation finishes, notify its owner that it has (by setting animation_finished)
+		# Remove all animations that finished from active_animations
+		for data in self.active_animations:
+			if(data['animation'].update() == True):
+				data['owner'].animation_finished = True
+		self.active_animations = [e for e in self.active_animations if e['animation'].finished == False]
+
+		# Refresh input state
+		self.input.next_state(new_keys=pg.key.get_pressed(), new_buttons=pg.mouse.get_pressed())
+		self.input.update(df=1)
+		self.any_key_pressed(input_state=self.input)
+		mouse_x, mouse_y = pg.mouse.get_pos()
+		mouse_pos = Vec(mouse_x, mouse_y)
+
+		# Update our active state
+		self.state.update(mouse_pos=mouse_pos)
+
+		# Draw all our queue'd up surfaces and animations
 		self.draw()
 
-		pg.display.flip()
-		self.game_clock.tick(60)
-
-	def start_animation(self, animation, pos):
-		self.active_animations.append({'animation': deepcopy(animation), 'pos':pos})
+		# Tick and frame limit to 60
+		self.game_clock.tick(60)		
+	def queue_surface(self, surface, depth, pos):
+		self.draw_queue.append((depth, surface, pos))
+	def start_animation(self, animation, pos, owner):
+		self.active_animations.append({ 'animation': deepcopy(animation),
+										'pos': pos,
+										'owner': owner})
 
 def main():
 	global game

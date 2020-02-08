@@ -33,7 +33,7 @@ class FullAnimation:
 					loop=False):
 		self.duration = duration
 		self.cur_frame = 0
-		self._sprites = [] # All sprites used in the animation
+		self._sprites = deepcopy(sprites) # All sprites used in the animation
 		self._frames = [] # Concurrent array with _sprites; which sprite to use on each frame
 		self._tweens = deepcopy(tweens)
 		self._tween_start_frames = [] # Concurrent to _tweens; the starting frame of each tween
@@ -41,8 +41,8 @@ class FullAnimation:
 		self.anchor_points = deepcopy(anchor_points) # Concurrent array with _sprites; corresponding anchor points
 		self.loop = loop # TODO: Implement loop
 
-		for sprite in sprites:
-			self._sprites.append(sprite.copy())
+		# for sprite in sprites:
+		# 	self._sprites.append(sprite.copy())
 		for i, sprite_length in enumerate(sprite_lengths):
 			self._frames += [i]*sprite_length
 
@@ -87,8 +87,8 @@ class FullAnimation:
 		return self.anchor_points[self.cur_sprite_index]-self.cur_tween.pos(t=t)
 	
 
-	def draw(self, screen, pos):
-		draw_surface(	screen=screen,
+	def draw(self, target, pos):
+		draw_surface(	target=target,
 						pos=pos-self.cur_pos,
 						surface=self._sprites[self.cur_sprite_index])
 
@@ -106,11 +106,8 @@ class FullAnimation:
 								anchor_points=self.anchor_points,
 								loop=self.loop)
 
-		other._sprites = self._sprites
-		for i, sprite in enumerate(other._sprites):
-			other._sprites[i] = sprite.copy()
-
+		other._sprites = deepcopy(self._sprites)
 		other._frames = copy(self._frames)
 		other._tween_start_frames = copy(self._tween_start_frames)
 
-		return other	
+		return other
