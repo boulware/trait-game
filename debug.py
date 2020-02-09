@@ -13,6 +13,9 @@ import numpy as np
 import json
 from util import InputState
 
+from harm_draw import draw_surface
+from harm_math import Vec
+
 colorama.init(autoreset=True)
 
 print_callstack = traceback.print_stack
@@ -89,6 +92,7 @@ class DebugUI:
 		def wrapper(*args, **kwargs):
 			hooked_func()
 			self.draw()
+			pg.display.flip()
 		return wrapper
 
 	def _any_key_pressed_hook(self, hooked_func):
@@ -124,7 +128,7 @@ class DebugUI:
 
 	def draw(self):
 		if self.active == False: return
-		screen = self.game.screen
+		screen = self.game.screen._pg_surface
 
 		if self.bg_alpha > 0:
 			bg = pg.Surface(screen.get_size())
@@ -141,6 +145,7 @@ class DebugUI:
 		self.test_treeview.parent_node = self.game
 		self.test_treeview.draw(target=screen)
 
+		pg.display.flip()
 	def any_key_pressed(self, input_state):
 		key = input_state # Alias for shorter expressions
 		if key.pressed(pg.K_d, pg.K_LCTRL):
@@ -528,7 +533,7 @@ class TreeView(UI.Element):
 				else:
 					self.selected_node = None
 
-	def draw(self, target=draw.screen):
+	def draw(self, target):
 		self.current_list = []
 		self._generate_current_list()
 

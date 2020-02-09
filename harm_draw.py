@@ -8,15 +8,18 @@ import util
 class Surface:
 	def __init__(self, size):
 		self._pg_surface = pg.Surface(size.tuple)
+		self.filepath = None
 	@classmethod
 	def from_pgsurface(cls, pg_surface):
 		new = Surface(size=Vec(0,0))
 		new._pg_surface = pg_surface
 		return new		
 	@classmethod
-	def from_file(cls, filename):
-		file_surface = pg.image.load(filename)
-		return cls.from_pgsurface(file_surface)
+	def from_file(cls, filepath):
+		file_surface = pg.image.load(filepath)
+		other = cls.from_pgsurface(file_surface)
+		other.filepath = filepath
+		return other
 	def set_colorkey(self, color):
 		self._pg_surface.set_colorkey(color)
 	def fill(self, color):

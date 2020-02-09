@@ -5,6 +5,7 @@ os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
 import math
 import random
 import json
+import re
 from functools import partial
 from enum import Enum
 from copy import copy, deepcopy
@@ -34,10 +35,21 @@ main_font_2 = pg.font.Font("font.ttf", 8)
 slot_width = 200
 enemy_slot_positions = [600,800,1000,1200]
 friendly_slot_positions = [200,400,600]
-
 # [top of screen => trait bars, top of screen => enemy sprite, top of screen => action icons]
 enemy_ui_paddings = [70, 100, 380, 380]
 friendly_ui_paddings = [70, 100, 380, 380]
+
+def get_slot_x_pos(team, slot):
+	if team == 0:
+		return friendly_slot_positions[slot]
+	else:
+		return enemy_slot_positions[slot]
+
+def get_team_ui_padding(team, index):
+	if team == 0:
+		return friendly_ui_paddings[index]
+	else:
+		return enemy_ui_paddings[index]
 
 # Trait enum:
 # T.Vigor, T.Armor, T.Focus
@@ -67,11 +79,11 @@ require_surfaces = {T.Vigor: Surface.from_file("RedRequire.png"),
 character_surface = Surface.from_file("Character.png")
 character_highlighted_surface = Surface.from_file("CharacterHighlighted.png")
 
-human_surface = Surface.from_file("Human.png")
-human_highlighted_surface = Surface.from_file("Human.png")
+human_surface = Surface.from_file("HumanIdle.png")
+human_highlighted_surface = Surface.from_file("HumanIdle.png")
 
-wolf_enemy_surface = Surface.from_file("WolfEnemy.png")
-wolf_enemy_highlighted_surface = Surface.from_file("WolfEnemyHighlighted.png")
+wolf_enemy_surface = Surface.from_file("WolfIdle.png")
+wolf_enemy_highlighted_surface = Surface.from_file("WolfIdle.png")
 wolf_enemy_howl_surface = Surface.from_file("WolfEnemyHowl.png")
 
 vigor_damage_animation = FullAnimation(	duration=60,
@@ -121,16 +133,22 @@ focus_heal_animation = FullAnimation(	duration=60,
 
 healthbar_width = 100
 healthbar_height = 32
-def draw_healthbar(target, color, pos, value, max_value, preview_damage=0):
+def draw_healthbar(game, color, pos, value, max_value, preview_damage=0):
 	bar_values_x_padding = 4
+	value_width, value_height = main_font_5.size(str(999))
+	surface_width = vigor_symbol_surface.width + healthbar_width + value_width + bar_values_x_padding
+	surface_height = max(vigor_symbol_surface.height, healthbar_height, value_height)
+	surface = Surface(size=Vec(surface_width, surface_height))
+	surface.set_colorkey(c.black)
+	surface.fill(c.black)
 
 	prev = Rect(Vec(0,0), Vec(0,0))
 	if color == c.red:
-		prev = draw_surface(target=target, pos=pos, surface=vigor_symbol_surface)
+		prev = draw_surface(target=surface, pos=Vec(0,0), surface=vigor_symbol_surface)
 	elif color == c.ltblue:
-		prev = draw_surface(target=target, pos=pos, surface=focus_symbol_surface)
+		prev = draw_surface(target=surface, pos=Vec(0,0), surface=focus_symbol_surface)
 	elif color == c.yellow:
-		prev = draw_surface(target=target, pos=pos, surface=armor_symbol_surface)
+		prev = draw_surface(target=surface, pos=Vec(0,0), surface=armor_symbol_surface)
 
 	if value > 0:
 		# Draw colored part of bar, capped at size of healthbar (extra points won't draw it past the bar)
@@ -138,32 +156,46 @@ def draw_healthbar(target, color, pos, value, max_value, preview_damage=0):
 		colored_bar_width = min(healthbar_width, healthbar_width * (value/max_value))
 		if preview_damage >= value:
 			# Preview damage will cover the entire normal bar, so skip drawing it and just draw the preview bar
-			draw_rect(target, darken_color(color,0.5), prev.top_right, Vec(colored_bar_width, healthbar_height))
+			draw_rect(	target=surface,
+						color=darken_color(color,0.5),
+						pos=prev.top_right,
+						size=Vec(colored_bar_width, healthbar_height))
 		else:
-			draw_rect(target, color, prev.top_right, Vec(colored_bar_width, healthbar_height))
+			draw_rect(	target=surface,
+						color=color,
+						pos=prev.top_right,
+						size=Vec(colored_bar_width, healthbar_height))
 
 			if preview_damage != 0 and value <= max_value: # TODO: This is glitchy when value > max_value, so we just don't draw anything for now
 				# Draw darker colored previewed damage section of bar.
 				preview_bar_start = prev.top_right + Vec(healthbar_width * ((value-preview_damage)/max_value), 0)
 				preview_bar_size = Vec(healthbar_width * (preview_damage/max_value), healthbar_height)
-				draw_rect(target, darken_color(color, 0.5), preview_bar_start, preview_bar_size)
+				draw_rect(	target=surface,
+							color=darken_color(color, 0.5),
+							pos=preview_bar_start,
+							size=preview_bar_size)
 
 	# Draw white outline of bar
-	prev = draw_rect(target, c.white, prev.top_right, Vec(healthbar_width, healthbar_height), 1)
+	prev = draw_rect(	target=surface,
+						color=c.white,
+						pos=prev.top_right,
+						size=Vec(healthbar_width, healthbar_height),
+						width=1)
 
 	amount_text_color = c.white
 	if preview_damage != 0:
 		# Draw the amount color darker if it will change due to damage preview
 		amount_text_color = darken_color(c.white, 0.5)
 	# Draw trait value text next to bar
-	draw_text(	target=target,
+	draw_text(	target=surface,
 				color=amount_text_color,
 				font=main_font_5,
 				pos=Vec(prev.right + bar_values_x_padding, prev.top + healthbar_height/2),
 				text="{}".format(max(0, value-preview_damage)), x_center=False)
 
-	return Rect(pos, Vec(healthbar_width, healthbar_height))
+	game.queue_surface(surface=surface, pos=pos, depth=50)
 
+	return Rect(pos, Vec(healthbar_width, healthbar_height))
 
 # duration - length of timer measured in frames
 # action - optional function to execute once the timer finishes
@@ -200,219 +232,10 @@ def get_sprite_slot_pos(slot, team):
 
 
 
-class UnitSchematic:
-	def __init__(self, name, traits, idle_animation, hover_idle_animation):
-		self.name = name
-		self.max_traits = copy(traits)
-		self.idle_animation = copy(idle_animation)
-		self.hover_idle_animation = copy(hover_idle_animation)
-
-		self.actions = []
-		self.action_animations = [] # Concurrent array to self.actions
-	def add_action(self, action):
-		self.actions.append(deepcopy(action)) # TODO: is deepcopy(action) necessary?
-		self.action_animations.append(self.idle_animation)
-	def set_animation(self, action_index, animation):
-		if action_index > len(self.action_animations)-1:
-			print("Tried to set enemy animation for non-existent action.")
-			return
-
-		self.action_animations[action_index] = animation
-
-	def serialize(self):
-		s = ""
-		s += "name is {}\n".format(self.name)
-		for trait, value in self.max_traits.items():
-			if value == 0: continue
-			s += "\thas {} {}\n".format(value, trait_strings[trait])
-		for action in self.actions:
-			s += "\thas action {}\n".format(action.name)
-			s += "\t\ttargets {}\n".format(target_set_strings[action.target_set])
-			for trait, value in action.damages.items():
-				if value == 0: continue
-				s += "\t\tdeals {} {} damage\n".format(value, trait_strings[trait])
-			for trait, value in action.required.items():
-				if value == 0: continue
-				s += "\t\trequires {} {}\n".format(value, trait_strings[trait])
-
-		return s
-
-
-
-class Unit:
-	def __init__(self, team, slot, schematic):
-		self.team = team
-		self.slot = slot
-		self.max_traits = copy(schematic.max_traits)
-		self.cur_traits = copy(schematic.max_values)
-		self.idle_animation = deepcopy(schematic.idle_animation)
-		self.hover_idle_animation = deepcopy(schematic.hover_idle_animation)
-		self.actions = deepcopy(schematic.actions)
-		self.action_animations = deepcopy(schematic.action_animations) # Concurrent array to self.actions
-
-		for action in self.actions:
-			action.owner = self		
-		self.action_buttons = [ActionButton(pos=Vec(x=enemy_slot_positions[self.slot],
-														y=enemy_ui_paddings[3] + i*action_button_size.y),
-												linked_action=action) for i, action in enumerate(self.actions)]
-		
-		self.action_points = 1
-		self.current_action_index = None
-		self.current_action_targets = None
-	@property
-	def current_animation(self):
-		if self.current_action_index is None:
-			return self.idle_animation
-		else:
-			return self.action_animations[self.current_action_index]
-	@property
-	def action_finished(self):
-		if self.current_animation.finished:
-			return True
-		else:
-			return False
-	@property
-	def current_action(self):
-		if self.current_action_index != None:
-			return self.actions[self.current_action_index]
-		else:
-			return None
-	@property
-	def rect(self):
-		rect = self.current_animation.rect
-		rect.pos += get_sprite_slot_pos(slot=self.slot, team=self.team)
-		return rect
-	def start_action(self, action_index, targets):
-		if self.alive:
-			self.current_action_index = action_index
-			self.current_action_targets = targets
-	def start_random_action(self, allies, enemies):
-		if self.alive:
-			possible_actions_indices = [] # Actions which have their pre-reqs fulfilled
-			# Check each of our actions, and add them to the list of possible random actions
-			for i,action in enumerate(self.actions):
-				if action.can_use(user_traits=self.cur_values):
-
-					possible_actions_indices.append(i)
-
-			if len(possible_actions_indices) == 0:
-				# We have no valid actions. Return and do nothing.
-				return
-
-			self.current_action_index = random.choice(possible_actions_indices)
-			self.current_action_targets = []
-
-			action = self.actions[self.current_action_index]	
-			if action.target_set == TargetSet.Self:
-				self.current_action_targets = [self]
-			elif action.target_set == TargetSet.SingleAlly:
-				non_dead_allies = [e for e in allies if e.alive == True]
-				if len(non_dead_allies) > 0:
-					self.current_action_targets = [random.choice(non_dead_allies)]
-			elif action.target_set == TargetSet.OtherAlly:
-				non_self_non_dead_allies = [e for e in allies if e != self and e.alive == True]
-				if len(non_self_non_dead_allies) > 0:
-					print('t')
-					self.current_action_targets = [random.choice(non_self_non_dead_allies)]
-			elif action.target_set == TargetSet.AllAllies:
-				non_dead_allies = [e for e in allies if e.alive == True]				
-				if len(non_dead_allies) > 0:
-					self.current_action_targets = non_dead_allies
-			elif action.target_set == TargetSet.SingleEnemy:
-				if len(enemies) > 0:
-					self.current_action_targets = [random.choice(enemies)]
-			elif action.target_set == TargetSet.AllEnemies:
-				if len(enemies) > 0:
-					self.current_action_targets = enemies
-
-			if self.current_action_index != None and self.current_action_targets != None:
-				self.current_animation.restart()
-
-			self.actions[self.current_action_index].execute(user_traits=self.cur_values,
-													kwargs={	'source': self,
-																'targets':self.current_action_targets})
-	def update(self, frame_count=1):
-		if self.current_action_index is not None:
-			self.current_animation.update(frame_count)
-
-			# Switch back to animation-less sprite once animation is finished
-			if self.current_animation.finished is True:
-				self.current_action_index = None
-				self.current_action_targets = None
-	def draw(self, target, mouse_pos, preview_action=None):
-		if self.check_hover(mouse_pos=mouse_pos) == True:
-			hover = True
-		else:
-			hover = False
-		if self.alive:
-			x_pos = enemy_slot_positions[self.slot]
-
-			y_offset = 0
-			prev = Rect(Vec(0,0),Vec(0,0))
-			for trait, max_value in self.max_values.items():
-				cur_trait = self.cur_values[trait]
-				preview_damage = 0
-				if preview_action is not None:
-					if trait == T.Vigor and preview_action.damages[T.Vigor] > 0:
-						# Account for armor in preview damage
-						armor = self.cur_values[T.Armor]
-						preview_damage = max(1, preview_action.damages[trait] - armor)
-					else:
-						preview_damage = preview_action.damages[trait]
-
-				# Draws trait bars
-				draw_healthbar(	target, trait_colors[trait],
-								Vec(x_pos, enemy_ui_paddings[1] + y_offset),
-								cur_trait, max_value, preview_damage)
-
-				y_offset += healthbar_height
-
-			# Draws enemy sprite
-			sprite_surface = wolf_enemy_surface
-			if hover:
-				self.current_animation.draw(target=target,
-											pos=Vec(x_pos, enemy_ui_paddings[2]))
-			else:
-				self.current_animation.draw(target=target,
-											pos=Vec(x_pos, enemy_ui_paddings[2]))
-
-			# Draws action buttons
-			for button in self.action_buttons:
-				if button.linked_action == self.current_action:
-					force_highlight = True
-				else:
-					force_highlight = False
-
-				button.draw(target=target, mouse_pos=mouse_pos, force_highlight=force_highlight)
-
-			# for i, action in enumerate(self.actions):
-			# 	# TODO: Don't make a new action button every frame.
-			# 	button = ActionButton(pos=Vec(x_pos, enemy_ui_paddings[3] + i*action_button_size.y), linked_action=action)
-			# 	if i == self.current_action_index:
-			# 		button.draw(target=screen, hover=True)
-			# 	else:
-			# 		button.draw(target=screen, hover=False)
-	@property
-	def alive(self):
-		if self.cur_values[T.Vigor] > 0:
-			return True
-		else:
-			return False
-	def check_hover(self, mouse_pos):
-		if(
-				mouse_pos.x >= enemy_slot_positions[self.slot]
-			and mouse_pos.x <  enemy_slot_positions[self.slot] + 200
-			and mouse_pos.y >= 0
-			and mouse_pos.y <  screen_height
-		):
-			return True
-		else:
-			return False		
-
 # class Friendly:
 # 	def __init__(self, slot, traits, idle_animation, hover_idle_animation):
-# 		self.max_values = copy(traits)
-# 		self.cur_values = copy(self.max_values)
+# 		self.max_traits = copy(traits)
+# 		self.cur_traits = copy(self.max_traits)
 # 		self.slot = slot
 # 		self.team = 0
 # 		self.actions = []
@@ -427,7 +250,7 @@ class Unit:
 # 		self.current_action_index = None
 # 	def __deepcopy__(self, memo):
 # 		other = Friendly(	slot=self.slot,
-# 							traits=self.max_values,
+# 							traits=self.max_traits,
 # 							idle_animation=self.idle_animation,
 # 							hover_idle_animation=self.hover_idle_animation)
 
@@ -454,7 +277,7 @@ class Unit:
 # 		return rect
 # 	@property
 # 	def alive(self):
-# 		if self.cur_values[T.Vigor] > 0:
+# 		if self.cur_traits[T.Vigor] > 0:
 # 			return True
 # 		else:
 # 			return False		
@@ -500,8 +323,8 @@ class Unit:
 
 # 			# Draw trait bars
 # 			cur_y_offset = 0 # Tracks y offset for consecutive stacked trait bars
-# 			for trait, max_value in self.max_values.items():
-# 				cur_trait = self.cur_values[trait]
+# 			for trait, max_value in self.max_traits.items():
+# 				cur_trait = self.cur_traits[trait]
 # 				preview_damage = 0
 # 				if preview_action is not None:
 # 					preview_damage = preview_action.damages[trait]
@@ -529,6 +352,7 @@ def play_animation(kwargs):
 	if(pos == 'SelfPos'):
 		game.start_animation(animation=animation, pos=	source.rect.center
 														+ Vec(friendly_slot_positions[source.slot], friendly_ui_paddings[1]))
+
 def deal_damage(kwargs):
 	source = kwargs['source']
 	targets = kwargs['targets']
@@ -544,40 +368,53 @@ def deal_damage(kwargs):
 			icon_pos = get_sprite_slot_pos(slot=target.slot, team=target.team) + Vec(100, -100)
 			if trait == T.Vigor and amount != 0:
 				# Account for armor in any vigor damage.
-				armor = target.cur_values[T.Armor]
+				armor = target.cur_traits[T.Armor]
 				if amount > 0:
-					target.cur_values[trait] -= max(1, amount - armor)
+					target.cur_traits[trait] -= max(1, amount - armor)
 				else:
-					target.cur_values[trait] -= amount
+					target.cur_traits[trait] -= amount
 
 				if amount > 0:
-					game.start_animation(animation=vigor_damage_animation, pos=icon_pos)
+					game.start_animation(	animation=vigor_damage_animation,
+											pos=icon_pos,
+											owner=source)
 				else:
-					game.start_animation(animation=vigor_heal_animation, pos=icon_pos)						
+					game.start_animation(	animation=vigor_heal_animation,
+											pos=icon_pos,
+											owner=source)
 			elif trait == T.Armor and amount != 0:
-				target.cur_values[trait] -= amount
+				target.cur_traits[trait] -= amount
 				if amount > 0:
-					game.start_animation(animation=armor_damage_animation, pos=icon_pos)
+					game.start_animation(	animation=armor_damage_animation,
+											pos=icon_pos,
+											owner=source)
 				else:
-					game.start_animation(animation=armor_heal_animation, pos=icon_pos)						
+					game.start_animation(	animation=armor_heal_animation,
+											pos=icon_pos,
+											owner=source)
 			elif trait == T.Focus and amount != 0:
-				target.cur_values[trait] -= amount
+				target.cur_traits[trait] -= amount
 				if amount > 0:
-					game.start_animation(animation=focus_damage_animation, pos=icon_pos)
+					game.start_animation(	animation=focus_damage_animation,
+											pos=icon_pos,
+											owner=source)
 				else:
-					game.start_animation(animation=focus_heal_animation, pos=icon_pos)
-			if target.cur_values[trait] < 0:
-				target.cur_values[trait] = 0
+					game.start_animation(	animation=focus_heal_animation,
+											pos=icon_pos,
+											owner=source)
+			if target.cur_traits[trait] < 0:
+				target.cur_traits[trait] = 0
 				
 
 class TargetSet(Enum):
-	All = 0
-	Self = 1
-	SingleAlly = 2
-	OtherAlly = 3
-	AllAllies = 4
-	SingleEnemy = 5
-	AllEnemies = 6
+	Nothing = 0
+	All = 1
+	Self = 2
+	SingleAlly = 3
+	OtherAlly = 4
+	AllAllies = 5
+	SingleEnemy = 6
+	AllEnemies = 7
 
 target_set_strings = {	TargetSet.All: "All",
 						TargetSet.Self: "Self",
@@ -587,18 +424,111 @@ target_set_strings = {	TargetSet.All: "All",
 						TargetSet.AllEnemies: "All Enemies",
 						TargetSet.AllAllies: "All Allies"}
 
-class Action:
-	def __init__(self, name, owner, target_set, required, damages, description=""):
+class ActionSchematic:
+	def __init__(self, name, target_set, required, damages, description=""):
 		self.sub_actions = []
 		self.name = name
 		self.description = description
-		self.owner = owner
 		self.target_set = target_set
 		self.required = required
 		self.damages = damages
+	@classmethod
+	def from_string(cls, s):
+		name = "<PLACEHOLDER NAME>"
+		description = "<PLACEHOLDER DESCRIPTION>"
+		target_set = None
+		required = {T.Vigor: 0, T.Armor: 0, T.Focus: 0}
+		damages = {T.Vigor: 0, T.Armor: 0, T.Focus: 0}
+
+		for line in s.splitlines():
+			match = re.search('^name is (.*)', line.rstrip())
+			if match:
+				name = match.group(1)
+				continue
+
+			line_match = re.search('\t(has description) (.*)', line.rstrip())
+			if line_match:
+				arg_match = re.search('"(.*)"', line_match[2])
+				if arg_match:
+					description = arg_match[1]
+				continue
+			line_match = re.search('\t(targets) (.*)', line.rstrip())
+			if line_match:
+				target_set = next(key for key, value in target_set_strings.items() if value == line_match[2])
+				continue
+			line_match = re.search('\t(heals) (.*)', line.rstrip())
+			if line_match:
+				# ex "(heals) 3 Focus damage"
+				match = re.search('([0-9]*) ([a-zA-Z]*)', line_match[2])
+				if match:
+					value = int(match[1])
+					trait = next(key for key, value in trait_strings.items() if value == match[2])
+					damages[trait] = -value # Negative for healing
+				continue
+			line_match = re.search('\t(deals) (.*)', line.rstrip())
+			if line_match:
+				# ex: "(deals) 5 Vigor damage"
+				# TODO: "damage" optional? i.e., allow "(deals) 5 Vigor"?
+				match = re.search('([0-9]*) ([a-zA-Z]*) damage', line_match[2])
+				if match:
+					value = int(match[1])
+					trait = next(key for key, value in trait_strings.items() if value == match[2])
+					damages[trait] = value				
+				continue
+			line_match = re.search('\t(requires) (.*)', line.rstrip())
+			if line_match:
+				# "(requires) 1 Focus"
+				match = re.search('([0-9]*) ([a-zA-Z]*)', line_match[2])
+				if match:
+					value = int(match[1])
+					trait = next(key for key, value in trait_strings.items() if value == match[2])
+					required[trait] = value				
+				continue
+		return cls(	name=name,
+					description=description,
+					target_set=target_set,
+					required=required,
+					damages=damages)
+	def generate_action(self, owner):
+		return Action(schematic=self, owner=owner)
 	def add_sub_action(self, sub_action):
 		self.sub_actions.append(sub_action)
-	def can_use(self, user_traits):
+	def serialize(self):
+		s = ""
+		s += "name is {}\n".format(self.name)
+		s += "\thas description \"{}\"\n".format(self.description)
+		s += "\ttargets {}\n".format(target_set_strings[self.target_set])
+		for trait, value in self.damages.items():
+			if value == 0: continue
+			s += "\tdeals {} {} damage\n".format(value, trait_strings[trait])
+		for trait, value in self.required.items():
+			if value == 0: continue
+			s += "\trequires {} {}\n".format(value, trait_strings[trait])
+
+		return s
+class Action:
+	def __init__(self, schematic, owner):
+		self.name = schematic.name
+		self.description = schematic.description
+		self.target_set = schematic.target_set
+		self.required = copy(schematic.required)
+		self.damages = copy(schematic.damages)
+
+		self.owner = owner
+
+		self.sub_actions = []
+		self.sub_actions.append(lambda source, targets: deal_damage(kwargs={'source': source,
+																			'targets': targets, 
+																			'damages': self.damages}))
+	def execute(self, kwargs={}):
+		if self.usable is True:
+			for sub_action in self.sub_actions:
+				sub_action(**kwargs)
+			return True
+		else:
+			return False
+	@property
+	def usable(self):
 		valid_target = False
 
 		if self.target_set == TargetSet.OtherAlly:
@@ -610,17 +540,346 @@ class Action:
 
 		if valid_target == False:
 			return False
-		for trait, value in user_traits.items():
+		for trait, value in self.owner.cur_traits.items():
 			if value < self.required[trait]:
 				return False
-		return True		
-	def execute(self, user_traits, kwargs={}):
-		if self.can_use(user_traits=user_traits) == True:
-			for sub_action in self.sub_actions:
-				sub_action(**kwargs)
+		return True
+class ActionSchematicDatabase:
+	def __init__(self, action_data_filepath):
+		self.schematics = []
+
+		with open(action_data_filepath) as f:
+			in_action = False
+			action_string = ""
+			for line in f:
+				if in_action == False:
+					match = re.match('name is', line)
+					if match:
+						in_action = True
+						action_string += line
+						continue
+				else:
+					match = re.match('name is', line)
+					if not match:
+						action_string += line
+						continue
+					if match:
+						# We found the beginning of the next action, so we stop here,
+						# and parse everything we've found so far as an action,
+						# and add it to our schematics list
+						action = ActionSchematic.from_string(action_string)
+						self.schematics.append(action)
+
+						# Set next action string to begin with "name is ..."
+						# and repeat the process for all lines in the data file
+						action_string = line
+						continue
+
+			# If we're still in an action after end of file, we need to complete
+			# adding the last action
+			if in_action:
+				action = ActionSchematic.from_string(action_string)
+				self.schematics.append(action)
+	def get_schematic_by_name(self, name):
+		return next(s for s in self.schematics if s.name == name)
+	def generate_action(self, name, owner):
+		schematic = next(s for s in self.schematics if s.name == name)
+		return schematic.generate_action(owner=owner)
+		
+class UnitSchematic:
+	def __init__(self, name, description, traits, idle_animation, hover_idle_animation):
+		self.name = name
+		self.description = description
+		self.traits = copy(traits)
+		self.idle_animation = copy(idle_animation)
+		self.hover_idle_animation = copy(hover_idle_animation)
+
+		self.action_schematics = []
+		self.action_animations = [] # Concurrent array to self.actions
+	@classmethod
+	def from_string(cls, s):
+		name = "<PLACEHOLDER NAME>"
+		description = "<PLACEHOLDER DESCRIPTION>"
+		traits = {T.Vigor: 0, T.Armor: 0, T.Focus: 0}
+		idle_animation = None
+		hover_idle_animation = None
+		action_schematics = []
+		action_animations = []
+
+		for line in s.splitlines():
+			match = re.search('^name is (.*)', line.rstrip())
+			if match:
+				name = match.group(1)
+				continue
+
+			line_match = re.search('\t(has description) (.*)', line.rstrip())
+			if line_match:
+				arg_match = re.search('"(.*)"', line_match[2])
+				if arg_match:
+					description = arg_match[1]
+				continue
+			line_match = re.search('\t(uses sprite) (.*)', line.rstrip())
+			if line_match:
+				arg_match = re.search('"(.*)"', line_match[2])
+				if arg_match:
+					sprite_path = arg_match[1]
+					idle_surface = Surface.from_file(filepath=sprite_path)
+					idle_animation = FullAnimation(	sprites=[idle_surface],
+													duration=60,
+													sprite_lengths=[60],
+													anchor_points=[Vec(0,idle_surface.height)])
+					hover_idle_animation = idle_animation
+				continue			
+			line_match = re.search('\thas (.*)', line.rstrip())
+			if line_match:
+				# ex: "(has) 50 Vigor"
+				# or: "(has) action Rest"
+				match = re.search('([0-9]+) ([a-zA-Z]*)', line_match[1])
+				if match:
+					value = int(match[1])
+					trait = next(key for key, value in trait_strings.items() if value == match[2])
+					traits[trait] = value
+					continue
+				match = re.search('action (.*)', line_match[1])					
+				if match:
+					action_name = match[1]
+					schematic = game.action_db.get_schematic_by_name(action_name)
+					action_schematics.append(schematic)
+					continue
+
+		# Generate unit schematic
+		new = cls(	name=name,
+					description=description,
+					traits=traits,
+					idle_animation=idle_animation,
+					hover_idle_animation=hover_idle_animation)
+		new.action_schematics = action_schematics
+		new.action_animations = action_animations
+
+		return new
+	def generate_unit(self, team, slot):
+		return Unit(schematic=self, team=team, slot=slot)
+	# def set_animation(self, action_index, animation):
+	# 	if action_index > len(self.action_animations)-1:
+	# 		print("Tried to set enemy animation for non-existent action.")
+	# 		return
+
+	# 	self.action_animations[action_index] = animation
+	def serialize(self):
+		s = ""
+		s += "name is {}\n".format(self.name)
+		for trait, value in self.max_traits.items():
+			if value == 0: continue
+			s += "\thas {} {}\n".format(value, trait_strings[trait])
+		for action in self.actions:
+			s += "\thas action {}\n".format(action.name)
+
+		return s
+class Unit:
+	def __init__(self, team, slot, schematic):
+		self.team = team
+		self.slot = slot
+		self.max_traits = copy(schematic.traits)
+		self.cur_traits = copy(schematic.traits)
+		self.idle_animation = deepcopy(schematic.idle_animation)
+		self.hover_idle_animation = deepcopy(schematic.hover_idle_animation)
+		self.actions = [schematic.generate_action(owner=self) for schematic in schematic.action_schematics]
+		self.action_animations = []#deepcopy(schematic.action_animations) # Concurrent array to self.actions
+
+		for action in self.actions:
+			action.owner = self	
+		self.action_buttons = [ActionButton(pos=Vec(x=get_slot_x_pos(team=self.team, slot=self.slot),
+													y=get_team_ui_padding(team=self.team, index=3) + i*action_button_size.y),
+												linked_action=action) for i, action in enumerate(self.actions)]
+		
+		self.action_points = 1
+		self.current_action_index = None
+		self.current_action_targets = None
+	@property
+	def current_animation(self):
+		if self.current_action_index is None:
+			return self.idle_animation
+		else:
+			if len(self.action_animations) != 0:
+				return self.action_animations[self.current_action_index]
+			else:
+				return self.idle_animation
+	@property 
+	def action_finished(self):
+		if self.current_animation.finished or self.alive == False:
 			return True
 		else:
 			return False
+	@property
+	def current_action(self):
+		if self.current_action_index != None:
+			return self.actions[self.current_action_index]
+		else:
+			return None
+	@property
+	def rect(self):
+		rect = self.current_animation.rect
+		rect.pos += get_sprite_slot_pos(slot=self.slot, team=self.team)
+		return rect
+	def start_action(self, action_index, targets):
+		if self.alive:
+			self.current_action_index = action_index
+			self.current_action_targets = targets
+	def start_random_action(self, allies, enemies):
+		if self.alive:
+			possible_actions_indices = [] # Actions which have their pre-reqs fulfilled
+			# Check each of our actions, and add them to the list of possible random actions
+			for i,action in enumerate(self.actions):
+				if action.usable:
+
+					possible_actions_indices.append(i)
+
+			if len(possible_actions_indices) == 0:
+				# We have no valid actions. Return and do nothing.
+				return
+
+			self.current_action_index = random.choice(possible_actions_indices)
+			self.current_action_targets = []
+
+			action = self.actions[self.current_action_index]	
+			if action.target_set == TargetSet.Self:
+				self.current_action_targets = [self]
+			elif action.target_set == TargetSet.SingleAlly:
+				non_dead_allies = [e for e in allies if e.alive == True]
+				if len(non_dead_allies) > 0:
+					self.current_action_targets = [random.choice(non_dead_allies)]
+			elif action.target_set == TargetSet.OtherAlly:
+				non_self_non_dead_allies = [e for e in allies if e != self and e.alive == True]
+				if len(non_self_non_dead_allies) > 0:
+					self.current_action_targets = [random.choice(non_self_non_dead_allies)]
+			elif action.target_set == TargetSet.AllAllies:
+				non_dead_allies = [e for e in allies if e.alive == True]				
+				if len(non_dead_allies) > 0:
+					self.current_action_targets = non_dead_allies
+			elif action.target_set == TargetSet.SingleEnemy:
+				if len(enemies) > 0:
+					self.current_action_targets = [random.choice(enemies)]
+			elif action.target_set == TargetSet.AllEnemies:
+				if len(enemies) > 0:
+					self.current_action_targets = enemies
+
+			if self.current_action_index != None and self.current_action_targets != None:
+				self.current_animation.restart()
+
+			self.actions[self.current_action_index].execute(kwargs={'source': self,
+																	'targets':self.current_action_targets})
+	def update(self, frame_count=1):
+		if self.current_action_index is not None:
+			self.current_animation.update(frame_count)
+
+			# Switch back to animation-less sprite once animation is finished
+			if self.current_animation.finished is True:
+				self.current_action_index = None
+				self.current_action_targets = None
+	def draw(self, target, mouse_pos, preview_action=None):
+		if self.check_hover(mouse_pos=mouse_pos) == True:
+			hover = True
+		else:
+			hover = False
+		if self.alive:
+			x_pos = get_slot_x_pos(team=self.team, slot=self.slot)
+
+			y_offset = 0
+			prev = Rect(Vec(0,0),Vec(0,0))
+			for trait, max_value in self.max_traits.items():
+				cur_trait = self.cur_traits[trait]
+				preview_damage = 0
+				if preview_action is not None:
+					if trait == T.Vigor and preview_action.damages[T.Vigor] > 0:
+						# Account for armor in preview damage
+						armor = self.cur_traits[T.Armor]
+						preview_damage = max(1, preview_action.damages[trait] - armor)
+					else:
+						preview_damage = preview_action.damages[trait]
+
+				# Draws trait bars
+				draw_healthbar(	game=game,
+								color=trait_colors[trait],
+								pos=Vec(x_pos, get_team_ui_padding(team=self.team, index=1) + y_offset),
+								value=cur_trait,
+								max_value=max_value,
+								preview_damage=preview_damage)
+
+				y_offset += healthbar_height
+
+			# Draws unit sprite
+			if hover:
+				self.current_animation.draw(game=game,
+											pos=Vec(x_pos, get_team_ui_padding(team=self.team, index=2)))
+			else:
+				self.current_animation.draw(game=game,
+											pos=Vec(x_pos, get_team_ui_padding(team=self.team, index=2)))
+
+			# Draws action buttons
+			for button in self.action_buttons:
+				if button.linked_action == self.current_action:
+					force_highlight = True
+				else:
+					force_highlight = False
+
+				button.draw(game=game, mouse_pos=mouse_pos, force_highlight=force_highlight)
+
+	@property
+	def alive(self):
+		if self.cur_traits[T.Vigor] > 0:
+			return True
+		else:
+			return False
+	def check_hover(self, mouse_pos):
+		if(
+				mouse_pos.x >= enemy_slot_positions[self.slot]
+			and mouse_pos.x <  enemy_slot_positions[self.slot] + 200
+			and mouse_pos.y >= 0
+			and mouse_pos.y <  screen_height
+		):
+			return True
+		else:
+			return False		
+class UnitSchematicDatabase:
+	def __init__(self, unit_data_filepath):
+		self.schematics = []
+		with open(unit_data_filepath) as f:
+			in_unit = False
+			unit_string = ""
+			for line in f:
+				if in_unit == False:
+					match = re.match('name is', line)
+					if match:
+						in_unit = True
+						unit_string += line
+						continue
+				else:
+					match = re.match('name is', line)
+					if not match:
+						unit_string += line
+						continue
+					if match:
+						# We found the beginning of the next unit, so we stop here,
+						# and parse everything we've found so far as an unit,
+						# and add it to our schematics list
+						unit = UnitSchematic.from_string(unit_string)
+						self.schematics.append(unit)
+
+						# Set next unit string to begin with "name is ..."
+						# and repeat the process for all lines in the data file
+						unit_string = line
+						continue
+
+			# If we're still in an unit after end of file, we need to complete
+			# adding the last unit
+			if in_unit:
+				unit = UnitSchematic.from_string(unit_string)
+				self.schematics.append(unit)
+	def get_schematic_by_name(self, name):
+		return next(s for s in self.schematics if s.name == name)				
+	def generate_unit(self, name, team, slot):
+		schematic = next(s for s in self.schematics if s.name == name)
+		return schematic.generate_unit(team=team, slot=slot)
 
 action_button_size =  Vec(150,60)
 action_info_size = Vec(200,70)
@@ -666,7 +925,7 @@ class ActionButton:
 				# 			text=str(required), x_center=True, y_center=True, font=main_font_10)
 
 				# X out the trait if the owner doesn't fulfill that requirement
-				# if(self.linked_action.owner.cur_values[trait] < required):
+				# if(self.linked_action.owner.cur_traits[trait] < required):
 				# 	draw_x(target=self.surface, color=c.grey, rect=prev)
 
 		# Target set text
@@ -706,7 +965,7 @@ class ActionButton:
 				# 			text=str(required), x_center=True, y_center=True, font=main_font_10)
 
 				# X out the trait if the owner doesn't fulfill that requirement
-				# if(self.linked_action.owner.cur_values[trait] < required):
+				# if(self.linked_action.owner.cur_traits[trait] < required):
 				# 	draw_x(target=self.hover_surface, color=hover_c.grey, rect=prev)
 
 		# Target set text
@@ -737,8 +996,8 @@ class ActionButton:
 
 	def draw_info_box(self, mouse_pos):
 		game.queue_surface(surface=self.info_box_surface, depth=10, pos=mouse_pos)
-	def draw(self, target, mouse_pos, force_highlight=False):
-		if self.linked_action.can_use(user_traits=self.owner.cur_values) == False:
+	def draw(self, game, mouse_pos, force_highlight=False):
+		if self.linked_action.usable == False:
 			game.queue_surface(depth=20, surface=self.unable_surface, pos=self.pos)
 		elif self.check_hover(mouse_pos=mouse_pos) == True or force_highlight == True:
 			game.queue_surface(depth=20, surface=self.hover_surface, pos=self.pos)
@@ -854,6 +1113,101 @@ def enemy_is_valid_target(action, target):
 
 	return False
 
+class Button:
+	def __init__(self, pos, size, text, function):
+		self.pos = pos
+		self.size = size
+		self.text = text
+		self.function = function
+
+		self.surface = Surface(size=self.size)
+		self.surface.fill(c.dkgrey)
+		draw_rect(	target=self.surface,
+					color=c.white,
+					pos=Vec(0,0),
+					size=size,
+						width=1)
+		draw_text(	target=self.surface,
+					color=c.white,
+					pos=Vec(size.x/2, size.y/2),
+					text=self.text,
+					font=main_font_5,
+					x_center=True,
+					y_center=True)
+
+		self.hover_surface = Surface(size=self.size)
+		self.hover_surface.fill(c.ltgrey)
+		draw_rect(	target=self.hover_surface,
+					color=c.white,
+					pos=Vec(0,0),
+					size=size,
+					width=1)
+		draw_text(	target=self.hover_surface,
+					color=c.white,
+					pos=Vec(size.x/2, size.y/2),
+					text=self.text,
+					font=main_font_5,
+					x_center=True,
+					y_center=True)
+
+		self.hovered = False
+	@property
+	def rect(self):
+		return Rect(self.pos, self.size)
+	
+	def update(self, game):
+		if self.intersect(pos=game.mouse_pos):
+			self.hovered = True
+		else:
+			self.hovered = False
+
+		if game.input.pressed(button=0) and self.hovered:
+			self.function()
+	def draw(self, game):
+		if self.hovered == True:
+			game.queue_surface(	surface=self.hover_surface,
+								pos=self.pos,
+								depth=0)
+		else:
+			game.queue_surface(	surface=self.surface,
+								pos=self.pos,
+								depth=0)			
+	def intersect(self, pos):
+		if (	pos.x > self.rect.left
+			and pos.x < self.rect.right
+			and pos.y > self.rect.top
+			and pos.y < self.rect.bottom
+		):
+			return True
+
+		return False
+
+
+
+class MainMenuState:
+	def __init__(self):
+		self.buttons = []
+		self.buttons.append(Button(	pos=Vec(100,100),
+									size=Vec(150,70),
+									text="Start Battle",
+									function=lambda: game.start_battle()))
+		self.buttons.append(Button(	pos=Vec(100,170),
+									size=Vec(150,70),
+									text="Editor",
+									function=lambda: print("Entered editor")))
+		self.buttons.append(Button(	pos=Vec(100,240),
+									size=Vec(150,70),
+									text="Exit",
+									function=lambda: sys.exit()))		
+	def draw(self, game):
+		for button in self.buttons:
+			button.draw(game=game)
+	def update(self, game):
+		for button in self.buttons:
+			button.update(game=game)
+
+
+
 class BattleState:
 	def __init__(self):
 		self.turn = Turn(initial_active=True)
@@ -867,355 +1221,20 @@ class BattleState:
 		self.enemies = []
 
 		# Set up warrior and put in slot 0
-		warrior_schematic = UnitSchematic(	name="Warrior",
-											traits={T.Vigor:50, T.Armor:10, T.Focus:5},
-											idle_animation=FullAnimation(	sprites=[character_surface],
-																			sprite_lengths=[1],
-																			anchor_points=[Vec(0,character_surface.height)]),
-											hover_idle_animation=FullAnimation(	sprites=[character_highlighted_surface],
-																				sprite_lengths=[1],
-																				anchor_points=[Vec(0,character_highlighted_surface.height)])
-							)
+		warrior_unit = game.unit_db.generate_unit(name="Warrior", team=0, slot=0)
+		rogue_unit = game.unit_db.generate_unit(name="Rogue", team=0, slot=1)
+		self.friendlies.append(warrior_unit)
+		self.friendlies.append(rogue_unit)
 
-		rest_action = Action(	name="Rest",
-								description="Restores 2 vigor to self.",				
-								owner=None,
-								target_set=TargetSet.Self,
-								required={T.Vigor:0, T.Focus:0, T.Armor:0}, 
-								damages={T.Vigor:-2, T.Focus:0, T.Armor:0})
-		rest_action.add_sub_action(lambda source, targets: deal_damage(kwargs={	'source': source,
-																				'targets': targets, 
-																				'damages': rest_action.damages}))
-
-		# Strike
-		med_strike_action = Action(	name="Medium Strike",
-									description="Deals 5 vigor damage to target. Requires 2 vigor.",
-									owner=None,
-									target_set=TargetSet.SingleEnemy,
-									required={T.Vigor:2, T.Focus:0, T.Armor:0},
-									damages={T.Vigor:5, T.Focus:0, T.Armor:0})
-		med_strike_action.add_sub_action(lambda source, targets: deal_damage(kwargs={	'source': source,
-																						'targets': targets, 
-																						'damages': med_strike_action.damages}))
-
-		# Intimidate
-		intimidate_action = Action(	name="Intimidate",
-									description="Deals 5 focus damage to target. Requires 1 focus.",				
-									owner=None,
-									target_set=TargetSet.SingleEnemy,
-									required={T.Vigor:0, T.Focus:1, T.Armor:0},
-									damages={T.Vigor:0, T.Focus:5, T.Armor:0})
-		intimidate_action.add_sub_action(lambda source, targets: deal_damage(kwargs={	'source': source,
-																						'targets': targets, 
-																						'damages': intimidate_action.damages}))
-
-		# Bash
-		med_bash_action = Action(	name="Medium Bash",
-									description="Deals 4 armor damage to target. Requires 1 focus.",				
-									owner=None,
-									target_set=TargetSet.SingleEnemy,
-									required={T.Vigor:0, T.Focus:1, T.Armor:0},
-									damages={T.Vigor:0, T.Focus:0, T.Armor:4})
-		med_bash_action.add_sub_action(lambda source, targets: deal_damage(kwargs={	'source': source,
-																					'targets': targets, 
-																					'damages': med_bash_action.damages}))
-
-		warrior_schematic.add_action(rest_action)
-		warrior_schematic.add_action(med_strike_action)
-		warrior_schematic.add_action(intimidate_action)
-		warrior_schematic.add_action(med_bash_action)
-
-		rest_animation_length = 60
-		rest_sprite_animation = FullAnimation(	#end_pos=Vec(0,30),
-												#jerk=1.0,
-												#tweens=[Tween(end_pos=Vec(0,30), jerk=1.0, duration=rest_animation_length)]
-												duration=rest_animation_length,
-												sprites=[character_highlighted_surface],
-												sprite_lengths=[rest_animation_length],
-												anchor_points=[Vec(0, character_highlighted_surface.height)])
-		warrior_schematic.set_animation(	action_index=0,
-											animation=rest_sprite_animation)
-
-		med_strike_animation_length = 60
-		med_strike_sprite_animation = FullAnimation(#end_pos=Vec(100,0),
-												#jerk=5.0,
-												duration=med_strike_animation_length,
-												sprites=[character_surface],
-												sprite_lengths=[med_strike_animation_length],
-												anchor_points=[Vec(0, character_surface.height)])
-		warrior_schematic.set_animation(	action_index=1,
-											animation=med_strike_sprite_animation)
-
-		intimidate_animation_length = 60
-		intimidate_sprite_animation = FullAnimation(#end_pos=Vec(-20,0),
-													#jerk=0.7,
-													duration=intimidate_animation_length,
-													sprites=[character_surface],
-													sprite_lengths=[intimidate_animation_length],
-													anchor_points=[Vec(0, character_surface.height)])
-		warrior_schematic.set_animation(	action_index=2,
-											animation=intimidate_sprite_animation)
-
-		bash_animation_length = 60
-		bash_sprite_animation = FullAnimation(#end_pos=Vec(100,0),
-											#		jerk=0.5,												
-													duration=bash_animation_length,
-													sprites=[character_surface],
-													sprite_lengths=[bash_animation_length],
-													anchor_points=[Vec(0, character_surface.height)])
-		warrior_schematic.set_animation(	action_index=3,
-											animation=bash_sprite_animation)
-
-		with open("warrior_test.dat", "w") as f:
-			f.write(warrior_schematic.serialize())
-
-
-		# self.friendlies.append(
-		# self.friendlies.append(Friendly(slot=1,
-		# 								traits={T.Vigor:35, T.Armor:5, T.Focus:8},
-		# 								idle_animation=FullAnimation(	sprites=[character_surface],
-		# 																sprite_lengths=[1],
-		# 																anchor_points=[Vec(0,character_surface.height)]),
-		# 								hover_idle_animation=FullAnimation(	sprites=[character_highlighted_surface],
-		# 																	sprite_lengths=[1],
-		# 																	anchor_points=[Vec(0,character_highlighted_surface.height)])
-		# 								)		
-		# 							)
-
-
-		# Slot 0 friendly skills/animations
-		# for friendly in [self.friendlies[0]]:
-			# Res
-
-		# Slot 1 Friendly skills/animations
-		for friendly in [self.friendlies[1]]:
-			# Rest
-			rest_action = Action(	name="Rest",
-									description="Restores 2 vigor to self.",				
-									owner=None,
-									target_set=TargetSet.Self,
-									required={T.Vigor:0, T.Focus:0, T.Armor:0}, 
-									damages={T.Vigor:-2, T.Focus:0, T.Armor:0})
-			rest_action.add_sub_action(lambda source, targets: deal_damage(kwargs={	'source': source,
-																					'targets': targets, 
-																					'damages': rest_action.damages}))
-
-			# Strike
-			light_strike_action = Action(	name="Light Strike",
-									description="Deals 2 vigor damage to target. Requires 5 vigor.",
-									owner=None,
-									target_set=TargetSet.SingleEnemy,
-									required={T.Vigor:5, T.Focus:0, T.Armor:0},
-									damages={T.Vigor:2, T.Focus:0, T.Armor:0})
-			light_strike_action.add_sub_action(lambda source, targets: deal_damage(kwargs={	'source': source,
-																						'targets': targets, 
-																						'damages': light_strike_action.damages}))
-
-			# Intimidate
-			intimidate_action = Action(	name="Intimidate",
-										description="Deals 5 focus damage to target. Requires 1 focus.",				
-										owner=None,
-										target_set=TargetSet.SingleEnemy,
-										required={T.Vigor:0, T.Focus:1, T.Armor:0},
-										damages={T.Vigor:0, T.Focus:5, T.Armor:0})
-			intimidate_action.add_sub_action(lambda source, targets: deal_damage(kwargs={	'source': source,
-																							'targets': targets, 
-																							'damages': intimidate_action.damages}))
-
-			# Bash
-			light_bash_action = Action(	name="Light Bash",
-									description="Deals 2 armor damage to target. Requires 1 focus.",				
-									owner=None,
-									target_set=TargetSet.SingleEnemy,
-									required={T.Vigor:0, T.Focus:1, T.Armor:0},
-									damages={T.Vigor:0, T.Focus:0, T.Armor:2})
-			light_bash_action.add_sub_action(lambda source, targets: deal_damage(kwargs={	'source': source,
-																					'targets': targets, 
-																					'damages': light_bash_action.damages}))
-
-			friendly.add_action(rest_action)
-			friendly.add_action(light_strike_action)
-			friendly.add_action(intimidate_action)
-			friendly.add_action(light_bash_action)
-
-			rest_animation_length = 60
-			rest_sprite_animation = FullAnimation(	#end_pos=Vec(0,30),
-													#jerk=1.0,
-													#tweens=[Tween(end_pos=Vec(0,30), jerk=1.0, duration=rest_animation_length)]
-													duration=rest_animation_length,
-													sprites=[character_highlighted_surface],
-													sprite_lengths=[rest_animation_length],
-													anchor_points=[Vec(0, character_highlighted_surface.height)])
-			friendly.set_animation(	action_index=0,
-									animation=rest_sprite_animation)
-
-			light_strike_animation_length = 60
-			light_strike_sprite_animation = FullAnimation(#end_pos=Vec(100,0),
-													#jerk=5.0,
-													duration=light_strike_animation_length,
-													sprites=[character_surface],
-													sprite_lengths=[light_strike_animation_length],
-													anchor_points=[Vec(0, character_surface.height)])
-			friendly.set_animation(	action_index=1,
-									animation=light_strike_sprite_animation)
-
-			intimidate_animation_length = 60
-			intimidate_sprite_animation = FullAnimation(#end_pos=Vec(-20,0),
-														#jerk=0.7,
-														duration=intimidate_animation_length,
-														sprites=[character_surface],
-														sprite_lengths=[intimidate_animation_length],
-														anchor_points=[Vec(0, character_surface.height)])
-			friendly.set_animation(	action_index=2,
-									animation=intimidate_sprite_animation)
-
-			light_bash_animation_length = 60
-			light_bash_sprite_animation = FullAnimation(#end_pos=Vec(100,0),
-												#		jerk=0.5,												
-														duration=light_bash_animation_length,
-														sprites=[character_surface],
-														sprite_lengths=[light_bash_animation_length],
-														anchor_points=[Vec(0, character_surface.height)])
-			friendly.set_animation(	action_index=3,
-									animation=light_bash_sprite_animation)		
-
-
-		# START: Wolf schematic
-		wolf_schematic = EnemySchematic(	traits={T.Vigor:4, T.Armor:0, T.Focus:4}, 
-											idle_animation=FullAnimation(	sprites=[wolf_enemy_surface],
-																			sprite_lengths=[1],
-																			anchor_points=[Vec(0,wolf_enemy_surface.height)]),
-											hover_idle_animation=FullAnimation(	sprites=[wolf_enemy_highlighted_surface],
-																				sprite_lengths=[1],
-																				anchor_points=[Vec(0,wolf_enemy_highlighted_surface.height)])
-											)
-		# Bite
-		bite_action = Action(	name="Bite",
-								description="Deals 4 vigor damage to target. Requires 4 focus.",			
-								owner=None,
-								target_set=TargetSet.SingleEnemy,
-								required={T.Vigor:0, T.Focus:4, T.Armor:0},
-								damages={T.Vigor:4, T.Focus:0, T.Armor:0})
-		bite_action.add_sub_action(lambda source, targets: deal_damage(kwargs={	'source': source,
-																				'targets': targets, 
-																				'damages': bite_action.damages}))
-
-		# Howl
-		howl_action = Action(	name="Howl",
-								owner=None,
-								target_set=TargetSet.AllAllies,
-								required={T.Vigor:0, T.Focus:0, T.Armor:0},
-								damages={T.Vigor:0, T.Focus:-1, T.Armor:0})
-		howl_action.add_sub_action(lambda source, targets: deal_damage(kwargs={	'source': source,
-																				'targets': targets, 
-																				'damages': howl_action.damages}))
-
-		wolf_schematic.add_action(bite_action)
-		wolf_schematic.add_action(howl_action)
-
-		bite_animation_length = 60
-		bite_sprite_animation = FullAnimation(	tweens=[Tween(end_pos=Vec(-100,0), jerk=0.2, duration=rest_animation_length)],
-												duration=bite_animation_length,
-												sprites=[wolf_enemy_surface],
-												sprite_lengths=[bite_animation_length],
-												anchor_points=[Vec(0, wolf_enemy_surface.height)])
-		wolf_schematic.set_animation(	action_index=0,
-										animation=bite_sprite_animation)
-
-		howl_animation_length = 60
-		howl_sprite_animation = FullAnimation(	tweens=[Tween(end_pos=Vec(20,0), jerk=0.5, duration=rest_animation_length)],
-												duration=howl_animation_length,
-												sprites=[wolf_enemy_howl_surface],
-												sprite_lengths=[howl_animation_length],
-												anchor_points=[Vec(0, wolf_enemy_howl_surface.height)])
-		wolf_schematic.set_animation(	action_index=1,
-										animation=howl_sprite_animation)
-		# END: Wolf schematic
-
-		# START: Human schematic
-		human_schematic = EnemySchematic(	traits={T.Vigor:4, T.Armor:10, T.Focus:4}, 
-											idle_animation=FullAnimation(	sprites=[human_surface],
-																			sprite_lengths=[1],
-																			anchor_points=[Vec(0,human_surface.height)]),
-											hover_idle_animation=FullAnimation(	sprites=[human_highlighted_surface],
-																				sprite_lengths=[1],
-																				anchor_points=[Vec(0,human_highlighted_surface.height)])
-											)
-		# Heal
-		heal_action = Action(	name="Heal",
-								owner=None,
-								target_set=TargetSet.AllAllies,
-								required={T.Vigor:0, T.Focus:2, T.Armor:0},
-								damages={T.Vigor:-2, T.Focus:0, T.Armor:0})
-		heal_action.add_sub_action(lambda source, targets: deal_damage(kwargs={	'source': source,
-																				'targets': targets, 
-																				'damages': heal_action.damages}))
-
-		# Armor
-		armor_action = Action(	name="Rig Up",
-								owner=None,
-								target_set=TargetSet.OtherAlly,
-								required={T.Vigor:0, T.Focus:0, T.Armor:1},
-								damages={T.Vigor:0, T.Focus:0, T.Armor:-1})
-		armor_action.add_sub_action(lambda source, targets: deal_damage(kwargs={'source': source,
-																				'targets': targets, 
-																				'damages': armor_action.damages}))
-		armor_action.add_sub_action(lambda source, targets: deal_damage(kwargs={'source': source,
-																				'targets': TargetSet.Self, 
-																				'damages': {T.Vigor:0, T.Armor:1, T.Focus:0}}))
-
-		# Attack
-		attack_action = Action(	name="Attack",
-								owner=None,
-								target_set=TargetSet.SingleEnemy,
-								required={T.Vigor:0, T.Focus:2, T.Armor:0},
-								damages={T.Vigor:3, T.Focus:0, T.Armor:0})
-		attack_action.add_sub_action(lambda source, targets: deal_damage(kwargs={'source': source,
-																				'targets': targets, 
-																				'damages': attack_action.damages}))		
-
-		human_schematic.add_action(attack_action)
-		human_schematic.add_action(heal_action)
-		human_schematic.add_action(armor_action)
-
-		# Heal Animation
-		animation_length = 60
-		sprite_animation = FullAnimation(	tweens=[Tween(end_pos=Vec(30,0), jerk=0.2, duration=animation_length)],
-											duration=animation_length,
-											sprites=[human_surface],
-											sprite_lengths=[animation_length],
-											anchor_points=[Vec(0, human_surface.height)])
-		human_schematic.set_animation(	action_index=1,
-										animation=sprite_animation)
-
-		# Armor Animation
-		animation_length = 60
-		sprite_animation = FullAnimation(	tweens=[Tween(end_pos=Vec(-100,0), jerk=0.1, duration=30),
-													Tween(start_pos=Vec(-100,0), end_pos=Vec(0,0), jerk=0.4, duration=30)],
-											duration=animation_length,
-											sprites=[human_surface],
-											sprite_lengths=[animation_length],
-											anchor_points=[Vec(0, human_surface.height)])
-		human_schematic.set_animation(	action_index=2,
-										animation=sprite_animation)
-
-		# Attack Animation
-		animation_length = 60
-		sprite_animation = FullAnimation(	tweens=[Tween(end_pos=Vec(-100,0), jerk=0.2, duration=55),
-													Tween(start_pos=Vec(-100,0), end_pos=Vec(0,0), jerk=1.0, duration=5)],
-											duration=animation_length,
-											sprites=[human_surface],
-											sprite_lengths=[animation_length],
-											anchor_points=[Vec(0, human_surface.height)])
-		human_schematic.set_animation(	action_index=0,
-										animation=sprite_animation)			
-		# END: Human schematic
-
-		self.enemies.append(Enemy(slot=0, schematic=wolf_schematic))
-		self.enemies.append(Enemy(slot=1, schematic=wolf_schematic))
-		self.enemies.append(Enemy(slot=2, schematic=human_schematic))
-		self.enemies.append(Enemy(slot=3, schematic=human_schematic))		
-	def update(self, mouse_pos):
+		wolf_unit = game.unit_db.generate_unit(name="Wolf", team=1, slot=0)
+		wolf2_unit = game.unit_db.generate_unit(name="Wolf", team=1, slot=1)
+		human_unit = game.unit_db.generate_unit(name="Human", team=1, slot=2)
+		human2_unit = game.unit_db.generate_unit(name="Human", team=1, slot=3)
+		self.enemies.append(wolf_unit)
+		self.enemies.append(wolf2_unit)
+		self.enemies.append(human_unit)
+		self.enemies.append(human2_unit)
+	def update(self, game):
 		if self.turn.player_active:
 			if game.input.pressed(key=pg.K_q):
 				self.turn.end_turn(friendlies=self.friendlies, enemies=self.enemies)
@@ -1224,7 +1243,7 @@ class BattleState:
 					for friendly in self.friendlies:
 						if friendly.action_points > 0:
 							for button in friendly.action_buttons:
-								if button.check_hover(mouse_pos=mouse_pos) == True:
+								if button.check_hover(mouse_pos=game.mouse_pos) == True:
 									self.action_state = "Target Select"
 									self.selected_action_button = button
 
@@ -1232,42 +1251,42 @@ class BattleState:
 					for friendly in self.friendlies:
 						if friendly.alive is False:
 							continue
-						if friendly_slot_intersect(pos=Vec(mouse_pos.x, mouse_pos.y), slot=friendly.slot):
+						if friendly_slot_intersect(pos=Vec(game.mouse_pos.x, game.mouse_pos.y), slot=friendly.slot):
 							action = self.selected_action_button.linked_action
 							owner = self.selected_action_button.linked_action.owner
 							if action.target_set is TargetSet.All:
-								action.execute(user_traits=owner.cur_values, kwargs={	'source': owner,
-																						'targets': self.friendlies+self.enemies})
+								action.execute(kwargs={	'source': owner,
+														'targets': self.friendlies+self.enemies})
 								owner.action_points -= 1
 							elif action.target_set is TargetSet.SingleAlly:
-								action.execute(user_traits=owner.cur_values, kwargs={	'source': owner,
-																						'targets': [friendly]})
+								action.execute(kwargs={	'source': owner,
+														'targets': [friendly]})
 								owner.action_points -= 1
 							elif action.target_set == TargetSet.Self and friendly == owner:
-								action.execute(user_traits=owner.cur_values, kwargs={	'source': owner,
-																						'targets': [owner]})
+								action.execute(kwargs={	'source': owner,
+														'targets': [owner]})
 								owner.action_points -= 1
 							elif action.target_set is TargetSet.AllAllies:
-								action.execute(user_traits=owner.cur_values, kwargs={	'source': owner,
-																						'targets': self.friendlies})
+								action.execute(kwargs={	'source': owner,
+														'targets': self.friendlies})
 								owner.action_points -= 1
 					for enemy in self.enemies:
 						if enemy.alive is False:
 							continue
-						if enemy_slot_intersect(pos=Vec(mouse_pos.x, mouse_pos.y), slot=enemy.slot):
+						if enemy_slot_intersect(pos=Vec(game.mouse_pos.x, game.mouse_pos.y), slot=enemy.slot):
 							action = self.selected_action_button.linked_action
 							owner = self.selected_action_button.linked_action.owner
 							if action.target_set is TargetSet.All:
-								action.execute(user_traits=owner.cur_values, kwargs={	'source': owner,
-																						'targets': self.friendlies+self.enemies})
+								action.execute(kwargs={	'source': owner,
+														'targets': self.friendlies+self.enemies})
 								owner.action_points -= 1								
 							elif action.target_set is TargetSet.SingleEnemy:
-								action.execute(user_traits=owner.cur_values, kwargs={	'source': owner,
-																						'targets': [enemy]})
+								action.execute(kwargs={	'source': owner,
+														'targets': [enemy]})
 								owner.action_points -= 1
 							elif action.target_set is TargetSet.AllEnemies:
-								action.execute(user_traits=owner.cur_values, kwargs={	'source': owner,
-																						'targets': self.enemies})
+								action.execute(kwargs={	'source': owner,
+														'targets': self.enemies})
 								owner.action_points -= 1
 
 
@@ -1289,35 +1308,35 @@ class BattleState:
 
 			if action.target_set == TargetSet.All:
 				for friendly in self.friendlies:
-					if friendly.alive == True and friendly_slot_intersect(pos=mouse_pos, slot=friendly.slot):
+					if friendly.alive == True and friendly_slot_intersect(pos=game.mouse_pos, slot=friendly.slot):
 						previewed_target_set = self.friendlies+self.enemies # All
 						break
 				if previewed_target_set == []: # If we found something in friendlies, we don't need to check enemies
 					for enemy in self.enemies:
-						if enemy.alive == True and enemy_slot_intersect(pos=mouse_pos, slot=enemy.slot):
+						if enemy.alive == True and enemy_slot_intersect(pos=game.mouse_pos, slot=enemy.slot):
 							previewed_target_set = self.friendlies+self.enemies # All
 			elif action.target_set == TargetSet.AllEnemies:
 				for enemy in self.enemies:
-					if enemy.alive == True and enemy_slot_intersect(pos=mouse_pos, slot=enemy.slot):
+					if enemy.alive == True and enemy_slot_intersect(pos=game.mouse_pos, slot=enemy.slot):
 						previewed_target_set = self.enemies
 						break
 			elif action.target_set == TargetSet.AllAllies:
 				for friendly in self.friendlies:
-					if friendly.alive == True and friendly_slot_intersect(pos=mouse_pos, slot=friendly.slot):
+					if friendly.alive == True and friendly_slot_intersect(pos=game.mouse_pos, slot=friendly.slot):
 						previewed_target_set = self.friendlies
 						break
 			elif action.target_set == TargetSet.SingleEnemy:
 				for enemy in self.enemies:
-					if enemy.alive == True and enemy_slot_intersect(pos=mouse_pos, slot=enemy.slot):
+					if enemy.alive == True and enemy_slot_intersect(pos=game.mouse_pos, slot=enemy.slot):
 						previewed_target_set = [enemy]
 						break
 			elif action.target_set == TargetSet.SingleAlly:
 				for friendly in self.friendlies:
-					if friendly.alive == True and friendly_slot_intersect(pos=mouse_pos, slot=friendly.slot):
+					if friendly.alive == True and friendly_slot_intersect(pos=game.mouse_pos, slot=friendly.slot):
 						previewed_target_set = [friendly]
 						break
 			elif action.target_set == TargetSet.Self:
-				if action.owner.alive == True and friendly_slot_intersect(pos=mouse_pos, slot=action.owner.slot):
+				if action.owner.alive == True and friendly_slot_intersect(pos=game.mouse_pos, slot=action.owner.slot):
 					previewed_target_set = [action.owner]
 
 		# End turn if action points are at 0 for all allies
@@ -1328,13 +1347,13 @@ class BattleState:
 		# Draw friendlies
 		for friendly in self.friendlies:
 			if friendly in previewed_target_set and self.action_state == "Target Select":
-				friendly.draw(target=game.screen, mouse_pos=mouse_pos, preview_action=action)
+				friendly.draw(target=game.screen, mouse_pos=game.mouse_pos, preview_action=action)
 				highlight_surface = Surface(Vec(200,screen_height))
 				highlight_surface.set_alpha(30)
 				highlight_surface.fill(c.white)
-				draw_surface(	target=game.screen,
-								surface=highlight_surface,
-								pos=Vec(friendly_slot_positions[friendly.slot], 0))
+				game.queue_surface(	surface=highlight_surface,
+									pos=Vec(friendly_slot_positions[friendly.slot], 0),
+									depth=1000)
 			else:
 				back_surface = Surface(Vec(200,screen_height))
 				back_surface.set_alpha(20)
@@ -1348,39 +1367,41 @@ class BattleState:
 					else:
 						highlight_surface.fill(c.green)
 
-					draw_surface(	target=game.screen,
-									surface=highlight_surface,
-									pos=Vec(friendly_slot_positions[friendly.slot], 0))
-				friendly.draw(target=game.screen, mouse_pos=mouse_pos)
+					game.queue_surface(	surface=highlight_surface,
+										pos=Vec(friendly_slot_positions[friendly.slot], 0),
+										depth=-1)
+				friendly.draw(target=game.screen, mouse_pos=game.mouse_pos)
 
 		# Draw enemies
 		for enemy in self.enemies:
 			if enemy.alive == False:
 				continue
 			if enemy in previewed_target_set and self.action_state == "Target Select":
-				enemy.draw(target=game.screen, mouse_pos=mouse_pos, preview_action=action)
+				enemy.draw(target=game.screen, mouse_pos=game.mouse_pos, preview_action=action)
 				highlight_surface = Surface(Vec(200,screen_height))
 				highlight_surface.set_alpha(30)
 				highlight_surface.fill(c.white)
-				draw_surface(	target=game.screen,
-								surface=highlight_surface,
-								pos=Vec(enemy_slot_positions[enemy.slot], 0))
+				game.queue_surface(	surface=highlight_surface,
+									pos=Vec(enemy_slot_positions[enemy.slot], 0),
+									depth=-1)
 			else:
-				enemy.draw(target=game.screen, mouse_pos=mouse_pos)
+				enemy.draw(target=game.screen, mouse_pos=game.mouse_pos)
 
 		if self.action_state == "Target Select":
 			# Targeting line/arrow
-			# width = abs(mouse_pos.x - self.selected_action_button.rect.center_right.x)
-			# height = abs(mouse_pos.y - self.selected_action_button.rect.center_right.y)
+			# width = abs(game.mouse_pos.x - self.selected_action_button.rect.center_right.x)
+			# height = abs(game.mouse_pos.y - self.selected_action_button.rect.center_right.y)
 			surface = Surface(size=Vec(screen_width, screen_height))
 			surface.set_colorkey(c.pink)
 			surface.fill(c.pink)
 			draw_line(	target=surface,
 						color=c.white,
 						start=self.selected_action_button.rect.center_right,
-						end=mouse_pos)
+						end=game.mouse_pos)
 
-			game.queue_surface(surface=surface, depth=5, pos=Vec(0,0))				
+			game.queue_surface(surface=surface, depth=-10, pos=Vec(0,0))				
+	def draw(self, game):
+		pass
 	def get_allies(self, team):
 		if team == 0:
 			return self.friendlies
@@ -1394,10 +1415,16 @@ class BattleState:
 
 class Game:
 	def __init__(self):
+		global game
+		game = self
+
 		pg.init()
 		self.screen = Surface.from_pgsurface(pg.display.set_mode((screen_width, screen_height)))
 
-		self.state = BattleState()
+		self.action_db = ActionSchematicDatabase(action_data_filepath="actions.dat")
+		self.unit_db = UnitSchematicDatabase(unit_data_filepath="units.dat")
+
+		self.state = MainMenuState()
 		self.active_animations = []
 		self.draw_queue = []
 		self.game_clock = pg.time.Clock()
@@ -1412,6 +1439,12 @@ class Game:
 		# Clear screen
 		self.screen.fill(c.dkgrey)
 
+		self.state.draw(game=self)
+
+		# Draw each animation in active_animation at its position
+		for data in self.active_animations:
+			data['animation'].draw(game=game, pos=data['pos'])
+
 		# Sort drawing queue by depth
 		self.draw_queue.sort(key=lambda x: x[0], reverse=True)
 
@@ -1423,17 +1456,16 @@ class Game:
 							surface=surface,
 							pos=pos)
 
-		# Draw each animation in active_animation at its position
-		for data in self.active_animations:
-			data['animation'].draw(target=self.screen, pos=data['pos'])
-
 		# Draw FPS text in top left corner
 		draw_text(	target=self.screen, color=c.green,
-					pos=Vec(4,4), text="{:.2f}".format(self.game_clock.get_fps()),
+					pos=Vec(4,4), text="{:.0f}".format(self.game_clock.get_fps()),
 					font=main_font_5, x_center=False, y_center=False)
 
 		# Flip buffer to display
-		pg.display.flip()
+		# If debugger is active, let it draw its stuff and then flip the display itself		
+		if debug.debugger == None:
+			pg.display.flip()
+
 	def any_key_pressed(self, input_state):
 		pass
 	def update(self, df=1, mouse_pos=(0,0)): # TODO: mouse_pos, esp. with default arg, doesn't need to be here
@@ -1462,25 +1494,29 @@ class Game:
 		self.input.update(df=1)
 		self.any_key_pressed(input_state=self.input)
 		mouse_x, mouse_y = pg.mouse.get_pos()
-		mouse_pos = Vec(mouse_x, mouse_y)
+		self.mouse_pos = Vec(mouse_x, mouse_y)
+
+		if self.input.pressed(key=pg.K_ESCAPE):
+			self.state = MainMenuState()
 
 		# Update our active state
-		self.state.update(mouse_pos=mouse_pos)
+		self.state.update(game=self)
 
 		# Draw all our queue'd up surfaces and animations
 		self.draw()
 
 		# Tick and frame limit to 60
-		self.game_clock.tick(60)		
+		self.game_clock.tick(60)
 	def queue_surface(self, surface, depth, pos):
 		self.draw_queue.append((depth, surface, pos))
 	def start_animation(self, animation, pos, owner):
 		self.active_animations.append({ 'animation': deepcopy(animation),
 										'pos': pos,
 										'owner': owner})
+	def start_battle(self):
+		self.state = BattleState()
 
 def main():
-	global game
 	game = Game()
 	while True:
 		game.update(df=1, mouse_pos=(0,0))

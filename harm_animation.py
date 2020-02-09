@@ -78,7 +78,7 @@ class FullAnimation:
 			return False
 	@property
 	def cur_sprite_index(self):
-		return self._frames[self.cur_frame]
+		return self._frames[min(self.duration-1, self.cur_frame)]
 	
 
 	@property
@@ -87,10 +87,15 @@ class FullAnimation:
 		return self.anchor_points[self.cur_sprite_index]-self.cur_tween.pos(t=t)
 	
 
-	def draw(self, target, pos):
-		draw_surface(	target=target,
-						pos=pos-self.cur_pos,
-						surface=self._sprites[self.cur_sprite_index])
+	def draw(self, game, pos):
+		#print(target)
+		game.queue_surface(	surface=self._sprites[self.cur_sprite_index],
+							pos=pos-self.cur_pos,
+							depth=100)
+
+		# draw_surface(	target=target,
+		# 				pos=pos-self.cur_pos,
+		# 				surface=self._sprites[self.cur_sprite_index])
 
 	@property
 	def rect(self):

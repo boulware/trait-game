@@ -25,6 +25,11 @@ def parse_enemy_schematics(filename):
 				if trait == 'armor': cur_armor = int(value)
 				if trait == 'focus': cur_focus = int(value)
 
+#name is Medium Strike
+#	has description "Deals 5 vigor damage to target. Requires 2 vigor."
+#	targets Single Enemy
+#	deals 5 Vigor damage
+#	requires 2 Vigor
 
 	print("{}: [Vigor={}, Armor={}, Focus={}]".format(cur_name, cur_vigor, cur_armor, cur_focus))
 

@@ -1,30 +1,48 @@
-Wolf's Bite
-	animation is 30 frames
-	starts (0,0)
-	ends (-100,0)
-	jerk is 5.0
-
-	
-
-
-
-bite_animation_length = 30
-bite_sprite_animation = FullAnimation(	end_pos=Vec(-100,0),
-										jerk=5.0,
-										duration=bite_animation_length,
-										sprites=[wolf_enemy_surface],
-										frame_lengths=[bite_animation_length],
-										anchor_points=[Vec(0, wolf_enemy_surface.get_height())])
-self.wolf.set_animation(	action_index=0,
-							animation=bite_sprite_animation)
-
-self.wolf.add_action(howl_action)
-howl_animation_length = 30
-howl_sprite_animation = FullAnimation(	end_pos=Vec(20,0),
-										jerk=1.0,
-										duration=howl_animation_length,
-										sprites=[wolf_enemy_howl_surface],
-										frame_lengths=[howl_animation_length],
-										anchor_points=[Vec(0, wolf_enemy_howl_surface.get_height())])
-self.wolf.set_animation(	action_index=1,
-							animation=howl_sprite_animation)
+name is Rest
+	has description "Restores 2 vigor to self."
+	targets Self
+	heals 2 Vigor
+name is Medium Strike
+	has description "Deals 5 vigor damage to target. Requires 2 vigor."
+	targets Single Enemy
+	deals 5 Vigor damage
+	requires 2 Vigor
+name is Intimidate
+	has description "Deals 5 focus damage to target. Requires 1 focus."
+	targets Single Enemy
+	deals 5 Focus damage
+	requires 1 Focus
+name is Medium Bash
+	has description "Deals 4 armor damage to target. Requires 1 focus."
+	targets Single Enemy
+	deals 4 Armor damage
+	requires 1 Focus
+name is Light Strike
+	has description "Deals 3 vigor damage to target. Requires 2 vigor."
+	targets Single Enemy
+	deals 3 Vigor damage
+	requires 2 Vigor
+name is Bite
+	has description "Deals 4 vigor damage. Requires 4 focus."
+	targets Single Enemy
+	deals 4 Vigor damage
+	requires 4 Focus
+name is Howl
+	has description "Gives 4 focus to all allies. Requires 4 focus."
+	targets All Allies
+	heals 1 Focus
+name is Heal
+	has description "Heals all allies for 2 vigor. Requires 2 focus."
+	targets All Allies
+	heals 2 Vigor
+	requires 2 Focus
+name is Rig Up
+	has description "Transfer 1 armor from self to another ally. Requires 1 armor.""
+	targets Other Ally
+	heals 1 Armor
+	requires 1 Armor
+name is Attack
+	has description "Deals 3 vigor damage to target. Requires 2 focus."
+	targets Single Enemy
+	deals 3 Vigor damage
+	requires 2 Focus
