@@ -13,7 +13,7 @@ from copy import copy, deepcopy
 import debug
 from util import InputState
 from harm_math import Vec, Rect
-from harm_animation import Tween, FullAnimation
+from harm_animation import Tween, Animation
 from harm_draw import Surface, draw_surface, darken_color, draw_line, draw_rect, draw_text, AlignX, AlignY, draw_x, draw_text_wrapped
 import constants as c
 
@@ -86,21 +86,21 @@ wolf_enemy_surface = Surface.from_file("WolfIdle.png")
 wolf_enemy_highlighted_surface = Surface.from_file("WolfIdle.png")
 wolf_enemy_howl_surface = Surface.from_file("WolfEnemyHowl.png")
 
-vigor_damage_animation = FullAnimation(	duration=60,
+vigor_damage_animation = Animation(	duration=60,
 										sprites=[vigor_symbol_surface],
 										sprite_lengths=[60],
 										tweens=[Tween(	start_pos=Vec(0,0),
 														end_pos=Vec(0,50),
 														duration=60)],
 										anchor_points=[Vec(vigor_symbol_surface.width/2, vigor_symbol_surface.height/2)])
-armor_damage_animation = FullAnimation(	duration=60,
+armor_damage_animation = Animation(	duration=60,
 										sprites=[armor_symbol_surface],
 										sprite_lengths=[60],
 										tweens=[Tween(	start_pos=Vec(0,0),
 														end_pos=Vec(0,50),
 														duration=60)],
 										anchor_points=[Vec(armor_symbol_surface.width/2, armor_symbol_surface.height/2)])
-focus_damage_animation = FullAnimation(	duration=60,
+focus_damage_animation = Animation(	duration=60,
 										sprites=[focus_symbol_surface],
 										sprite_lengths=[60],
 										tweens=[Tween(	start_pos=Vec(0,0),
@@ -108,21 +108,21 @@ focus_damage_animation = FullAnimation(	duration=60,
 														duration=60)],
 										anchor_points=[Vec(focus_symbol_surface.width/2, focus_symbol_surface.height/2)])
 
-vigor_heal_animation = FullAnimation(	duration=60,
+vigor_heal_animation = Animation(	duration=60,
 										sprites=[vigor_symbol_surface],
 										sprite_lengths=[60],
 										tweens=[Tween(	start_pos=Vec(0,50),
 														end_pos=Vec(0,0),
 														duration=60)],
 										anchor_points=[Vec(vigor_symbol_surface.width/2, vigor_symbol_surface.height/2)])
-armor_heal_animation = FullAnimation(	duration=60,
+armor_heal_animation = Animation(	duration=60,
 										sprites=[armor_symbol_surface],
 										sprite_lengths=[60],
 										tweens=[Tween(	start_pos=Vec(0,50),
 														end_pos=Vec(0,0),
 														duration=60)],
 										anchor_points=[Vec(armor_symbol_surface.width/2, armor_symbol_surface.height/2)])
-focus_heal_animation = FullAnimation(	duration=60,
+focus_heal_animation = Animation(	duration=60,
 										sprites=[focus_symbol_surface],
 										sprite_lengths=[60],
 										tweens=[Tween(	start_pos=Vec(0,50),
@@ -604,7 +604,6 @@ class UnitSchematic:
 		idle_animation = None
 		hover_idle_animation = None
 		action_schematics = []
-		action_animations = []
 
 		for line in s.splitlines():
 			match = re.search('^name is (.*)', line.rstrip())
@@ -624,7 +623,7 @@ class UnitSchematic:
 				if arg_match:
 					sprite_path = arg_match[1]
 					idle_surface = Surface.from_file(filepath=sprite_path)
-					idle_animation = FullAnimation(	sprites=[idle_surface],
+					idle_animation = Animation(	sprites=[idle_surface],
 													duration=60,
 													sprite_lengths=[60],
 													anchor_points=[Vec(0,idle_surface.height)])
@@ -654,7 +653,10 @@ class UnitSchematic:
 					idle_animation=idle_animation,
 					hover_idle_animation=hover_idle_animation)
 		new.action_schematics = action_schematics
-		new.action_animations = action_animations
+		# Just fill the action_animations list with our idle animations.
+		# They'll be replaced later when the animations are read from
+		# data files
+		new.action_animations = [idle_animation]*len(action_schematics) 
 
 		return new
 	def generate_unit(self, team, slot):
@@ -684,7 +686,7 @@ class Unit:
 		self.idle_animation = deepcopy(schematic.idle_animation)
 		self.hover_idle_animation = deepcopy(schematic.hover_idle_animation)
 		self.actions = [schematic.generate_action(owner=self) for schematic in schematic.action_schematics]
-		self.action_animations = []#deepcopy(schematic.action_animations) # Concurrent array to self.actions
+		self.action_animations = deepcopy(schematic.action_animations)#deepcopy(schematic.action_animations) # Concurrent array to self.actions
 
 		for action in self.actions:
 			action.owner = self	
@@ -841,9 +843,9 @@ class Unit:
 		else:
 			return False		
 class UnitSchematicDatabase:
-	def __init__(self, unit_data_filepath):
+	def __init__(self, unit_data, animation_data):
 		self.schematics = []
-		with open(unit_data_filepath) as f:
+		with open(unit_data) as f:
 			in_unit = False
 			unit_string = ""
 			for line in f:
@@ -875,6 +877,35 @@ class UnitSchematicDatabase:
 			if in_unit:
 				unit = UnitSchematic.from_string(unit_string)
 				self.schematics.append(unit)
+
+		# Fetch animations for all the units from animations data file
+		with open(animation_data) as f:
+			in_schematic = False
+			unit_index = None
+			action_index = None			
+			string = ""
+			while line:
+				match = re.search('^([a-zA-Z]*)\'s (.*)', line.rstrip())
+				if match:
+					if unit_index == None:
+						# This is the beginning of an animation
+						unit_index, unit_schematic = next((i,s) for i,s in enumerate(self.schematics) if s.name == match[1])
+						action_index = next(i for i,a in enumerate(unit_schematic.action_schematics))
+						string += line
+					else:
+						# This is the beginning of an animation, and
+						# we've reached the end of the previous animation string
+						anim = Animation.from_string(string)
+						self.schematics[unit_index].action_animations[action_index] = anim
+						unit_index, unit_schematic = next((i,s) for i,s in enumerate(self.schematics) if s.name == match[1])
+						action_index = next(i for i,a in enumerate(unit_schematic.action_schematics))						
+						string = line
+				else:
+					string += line
+
+				line = f.readline()
+
+
 	def get_schematic_by_name(self, name):
 		return next(s for s in self.schematics if s.name == name)				
 	def generate_unit(self, name, team, slot):
@@ -1422,7 +1453,7 @@ class Game:
 		self.screen = Surface.from_pgsurface(pg.display.set_mode((screen_width, screen_height)))
 
 		self.action_db = ActionSchematicDatabase(action_data_filepath="actions.dat")
-		self.unit_db = UnitSchematicDatabase(unit_data_filepath="units.dat")
+		self.unit_db = UnitSchematicDatabase(unit_data="units.dat", animation_data="animations.dat")
 
 		self.state = MainMenuState()
 		self.active_animations = []

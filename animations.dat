@@ -1,0 +1,44 @@
+Warrior's Rest
+	duration is 60
+	has tween
+		duration is 60
+		starts at (0,0)
+		end at (0,0)
+		jerk is 1.0
+	has sub-animation
+		duration is 60
+		sprite is "WarriorIdle.png"
+		anchor is bottom left
+Warrior's Medium Strike
+	duration is 60
+	has tween
+		duration is 60
+		starts at (0,0)
+		end at (0,0)
+		jerk is 1.0
+	has sub-animation
+		duration is 60
+		sprite is "WarriorIdle.png"
+		anchor is bottom left
+Warrior's Intimidate
+	duration is 60
+	has tween
+		duration is 60
+		starts at (0,0)
+		end at (0,0)
+		jerk is 1.0
+	has sub-animation
+		duration is 60
+		sprite is "WarriorIdle.png"
+		anchor is bottom left
+Warrior's Medium Bash
+	duration is 60
+	has tween
+		duration is 60
+		starts at (0,0)
+		end at (0,0)
+		jerk is 1.0
+	has sub-animation
+		duration is 60
+		sprite is "WarriorIdle.png"
+		anchor is bottom left
