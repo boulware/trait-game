@@ -2,6 +2,7 @@ from copy import copy, deepcopy
 import math
 import re
 
+from util import last_index
 from harm_draw import draw_surface, Surface
 from harm_math import Vec, Rect
 
@@ -12,13 +13,13 @@ class Tween:
 		self.jerk=jerk
 		self.duration = duration
 	def pos(self, t):
-		x = self.end_pos.x
-		y = self.end_pos.y
-
-		if(self.start_pos.x != self.end_pos.x):
-			x = math.floor((1-pow(t,self.jerk))*self.start_pos.x + pow(t,self.jerk)*self.end_pos.x)
-		if(self.start_pos.y != self.end_pos.y):
-			y = math.floor((1-pow(t,self.jerk))*self.start_pos.y + pow(t,self.jerk)*self.end_pos.y)
+		x = (1-pow(t,self.jerk))*self.start_pos.x+(pow(t,self.jerk))*self.end_pos.x
+		y = (1-pow(t,self.jerk))*self.start_pos.y+(pow(t,self.jerk))*self.end_pos.y
+		#if t > 0:
+			# if(self.start_pos.x != self.end_pos.x):
+			# 	x = math.floor((1-pow(t,self.jerk))*self.start_pos.x + pow(t,self.jerk)*self.end_pos.x)
+			# if(self.start_pos.y != self.end_pos.y):
+			# 	y = math.floor((1-pow(t,self.jerk))*self.start_pos.y + pow(t,self.jerk)*self.end_pos.y)
 
 		return Vec(x,y)
 
@@ -78,6 +79,7 @@ class Animation:
 		cur_sub_index = 0
 
 		for line in s.splitlines():
+
 			# Match possessive unit name with action name
 			# ex: Warrior's Strike
 			match = re.search('^([a-zA-Z]*)\'s (.*)', line.rstrip())
@@ -87,12 +89,12 @@ class Animation:
 				continue
 
 			# Match duration of animation
-			line_match = re.search('\tduration is ([0-9]+)', line.rstrip())
+			line_match = re.search('^\tduration is (-*[0-9]+)', line.rstrip())
 			if line_match:
 				duration = int(line_match.group(1))
 				continue
 			# Match beginning of tween data
-			line_match = re.search('\thas tween', line.rstrip())
+			line_match = re.search('^\thas tween', line.rstrip())
 			if line_match:
 				cur_tween = Tween()
 				if in_sub_animation == True:
@@ -100,32 +102,31 @@ class Animation:
 					in_sub_animation = False
 				continue
 			# Match beginning of sub-animation data
-			line_match = re.search('\thas sub-animation', line.rstrip())
+			line_match = re.search('^\thas sub-animation', line.rstrip())
 			if line_match:
 				in_sub_animation = True
 				if cur_tween != None:
 					_tweens.append(cur_tween)
 					cur_tween = None
 				continue
-
 			if cur_tween != None:
 				# Match duration length of current tween
-				line_match = re.search('\t\tduration is ([0-9]+)', line.rstrip())
+				line_match = re.search('^\t\tduration is (-*[0-9]+)', line.rstrip())
 				if line_match:
 					cur_tween.duration = int(line_match[1])
 					continue
 				# Match start_pos of current tween
-				line_match = re.search('\t\tstarts? (?:at )?\(([0-9]+),([0-9]+)\)', line.rstrip())
+				line_match = re.search('^\t\tstarts? (?:at )?\((-*[0-9]+),(-*[0-9]+)\)', line.rstrip())
 				if line_match:
 					cur_tween.start_pos = Vec(int(line_match[1]), int(line_match[2]))
 					continue
 				# Match end_pos of current tween
-				line_match = re.search('\t\tends? (?:at )?\(([0-9]+),([0-9]+)\)', line.rstrip())
+				line_match = re.search('^\t\tends? (?:at )?\((-*[0-9]+),(-*[0-9]+)\)', line.rstrip())
 				if line_match:
 					cur_tween.end_pos = Vec(int(line_match[1]), int(line_match[2]))
 					continue
 				# Match jerk of current tween
-				line_match = re.search('\t\tjerk is ([0-9]+\.[0-9]+)', line.rstrip())
+				line_match = re.search('^\t\tjerk is (-*[0-9]+\.[0-9]+)', line.rstrip())
 				if line_match:
 					cur_tween.jerk = float(line_match[1])
 					continue
@@ -135,34 +136,36 @@ class Animation:
 				#		duration, sprite path, anchor
 				
 				# Match duration of current sub-animation
-				line_match = re.search('\t\tduration is ([0-9]+)', line.rstrip())
+				line_match = re.search('^\t\tduration is ([0-9]+)', line.rstrip())
 				if line_match:
 					sprite_lengths.append(int(line_match[1]))
 					continue
 				# Match sprite (filepath) of current sub-animation
-				line_match = re.search('\t\tsprite is \"(.*)\"', line.rstrip())
+				line_match = re.search('^\t\tsprite is \"(.*)\"', line.rstrip())
 				if line_match:
 					_sprites.append(Surface.from_file(filepath=line_match[1]))
 					continue
 				# Match sprite (filepath) of current sub-animation					
-				line_match = re.search('\t\tanchor is (.*)', line.rstrip())
+				line_match = re.search('^\t\tanchor is (.*)', line.rstrip())
 				if line_match:
 					if line_match[1] == "bottom left":
 						anchor_points.append(Vec(0, _sprites[cur_sub_index].height))
 						continue
 
-		return Animation(	duration=duration,
+		new = Animation(	duration=duration,
 							sprites=_sprites,
 							sprite_lengths=sprite_lengths,
 							tweens=_tweens,
 							anchor_points=anchor_points,
 							loop=loop)
+
+		return new
 	def update(self, frame_count=1):
 		"""Advance animation frame.
 		Return True if animation is finished, False otherwise"""
 		self.cur_frame += frame_count
 
-		if self._cur_tween_index != len(self._tweens)-1:
+		if self._cur_tween_index != last_index(self._tweens):
 			# If the current tween isn't the last tween
 			if self.cur_frame >= self._tween_start_frames[self._cur_tween_index+1]:
 				# If the animation frame has reached the beginning of the next tween
@@ -190,7 +193,6 @@ class Animation:
 		t = (self.cur_frame - self._tween_start_frames[self._cur_tween_index])/(self.cur_tween.duration) # should it be duration - 1?
 		return self.anchor_points[self.cur_sprite_index]-self.cur_tween.pos(t=t)
 	def draw(self, game, pos):
-		#print(target)
 		game.queue_surface(	surface=self._sprites[self.cur_sprite_index],
 							pos=pos-self.cur_pos,
 							depth=100)

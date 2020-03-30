@@ -17,9 +17,9 @@ class Surface:
 	@classmethod
 	def from_file(cls, filepath):
 		file_surface = pg.image.load(filepath)
-		other = cls.from_pgsurface(file_surface)
-		other.filepath = filepath
-		return other
+		new = cls.from_pgsurface(file_surface)
+		new.filepath = filepath
+		return new
 	def set_colorkey(self, color):
 		self._pg_surface.set_colorkey(color)
 	def fill(self, color):

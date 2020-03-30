@@ -3,7 +3,7 @@ Warrior's Rest
 	has tween
 		duration is 60
 		starts at (0,0)
-		end at (0,0)
+		ends at (-100,0)
 		jerk is 1.0
 	has sub-animation
 		duration is 60
@@ -14,7 +14,7 @@ Warrior's Medium Strike
 	has tween
 		duration is 60
 		starts at (0,0)
-		end at (0,0)
+		ends at (0,0)
 		jerk is 1.0
 	has sub-animation
 		duration is 60
@@ -25,7 +25,7 @@ Warrior's Intimidate
 	has tween
 		duration is 60
 		starts at (0,0)
-		end at (0,0)
+		ends at (0,0)
 		jerk is 1.0
 	has sub-animation
 		duration is 60
@@ -36,9 +36,64 @@ Warrior's Medium Bash
 	has tween
 		duration is 60
 		starts at (0,0)
-		end at (0,0)
+		ends at (0,0)
 		jerk is 1.0
 	has sub-animation
 		duration is 60
 		sprite is "WarriorIdle.png"
+		anchor is bottom left
+Rogue's Intimidate
+	duration is 60
+	has tween
+		duration is 60
+		starts at (0,0)
+		ends at (0,0)
+		jerk is 1.0
+	has sub-animation
+		duration is 60
+		sprite is "WarriorIdle.png"
+		anchor is bottom left		
+Rogue's Light Strike
+	duration is 60
+	has tween
+		duration is 60
+		starts at (0,0)
+		ends at (0,0)
+		jerk is 1.0
+	has sub-animation
+		duration is 60
+		sprite is "WarriorIdle.png"
+		anchor is bottom left
+Rogue's Medium Bash
+	duration is 60
+	has tween
+		duration is 60
+		starts at (0,0)
+		ends at (0,0)
+		jerk is 1.0
+	has sub-animation
+		duration is 60
+		sprite is "WarriorIdle.png"
+		anchor is bottom left		
+Wolf's Bite
+	duration is 60
+	has tween
+		duration is 30
+		starts at (0,0)
+		ends at (-50,0)
+		jerk is 5.0
+	has sub-animation
+		duration is 60
+		sprite is "WolfIdle.png"
+		anchor is bottom left
+Wolf's Howl
+	duration is 60
+	has tween
+		duration is 30
+		starts at (0,0)
+		ends at (50,0)
+		jerk is 0.2
+	has sub-animation
+		duration is 60
+		sprite is "WolfEnemyHowl.png"
 		anchor is bottom left

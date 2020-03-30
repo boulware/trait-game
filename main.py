@@ -11,7 +11,7 @@ from enum import Enum
 from copy import copy, deepcopy
 
 import debug
-from util import InputState
+from util import InputState, last_index
 from harm_math import Vec, Rect
 from harm_animation import Tween, Animation
 from harm_draw import Surface, draw_surface, darken_color, draw_line, draw_rect, draw_text, AlignX, AlignY, draw_x, draw_text_wrapped
@@ -266,7 +266,6 @@ def get_sprite_slot_pos(slot, team):
 # 												linked_action=action))
 # 	def set_animation(self, action_index, animation):
 # 		if action_index > len(self.action_animations)-1:
-# 			print("Tried to set friendly animation for non-existent action.")
 # 			return
 
 # 		self.action_animations[action_index] = animation
@@ -663,7 +662,6 @@ class UnitSchematic:
 		return Unit(schematic=self, team=team, slot=slot)
 	# def set_animation(self, action_index, animation):
 	# 	if action_index > len(self.action_animations)-1:
-	# 		print("Tried to set enemy animation for non-existent action.")
 	# 		return
 
 	# 	self.action_animations[action_index] = animation
@@ -708,7 +706,7 @@ class Unit:
 				return self.idle_animation
 	@property 
 	def action_finished(self):
-		if self.current_animation.finished or self.alive == False:
+		if self.current_action_index == None or self.alive == False:
 			return True
 		else:
 			return False
@@ -723,10 +721,21 @@ class Unit:
 		rect = self.current_animation.rect
 		rect.pos += get_sprite_slot_pos(slot=self.slot, team=self.team)
 		return rect
-	def start_action(self, action_index, targets):
+	def start_action(self, action, targeted, valid_targets):
 		if self.alive:
-			self.current_action_index = action_index
+			self.current_action_index = next(i for i,a in enumerate(self.actions) if a==action)
+			targets = valid_targets
+			if action.target_set is TargetSet.SingleAlly:
+				targets = [targeted]
+			elif action.target_set == TargetSet.Self and targeted == self:
+				targets = [self]
+			elif action.target_set is TargetSet.SingleEnemy:
+				targets = [targeted]
+
 			self.current_action_targets = targets
+			self.current_action.execute(kwargs={'source': self,
+												'targets': targets})				
+			self.action_points -= 1
 	def start_random_action(self, allies, enemies):
 		if self.alive:
 			possible_actions_indices = [] # Actions which have their pre-reqs fulfilled
@@ -770,6 +779,7 @@ class Unit:
 
 			self.actions[self.current_action_index].execute(kwargs={'source': self,
 																	'targets':self.current_action_targets})
+
 	def update(self, frame_count=1):
 		if self.current_action_index is not None:
 			self.current_animation.update(frame_count)
@@ -819,7 +829,8 @@ class Unit:
 
 			# Draws action buttons
 			for button in self.action_buttons:
-				if button.linked_action == self.current_action:
+				#if button.linked_action == self.current_action:
+				if button.linked_action == preview_action:
 					force_highlight = True
 				else:
 					force_highlight = False
@@ -890,7 +901,7 @@ class UnitSchematicDatabase:
 					if unit_index == None:
 						# This is the beginning of an animation
 						unit_index, unit_schematic = next((i,s) for i,s in enumerate(self.schematics) if s.name == match[1])
-						action_index = next(i for i,a in enumerate(unit_schematic.action_schematics))
+						action_index = next(i for i,a in enumerate(unit_schematic.action_schematics) if a.name == match[2])
 						string += line
 					else:
 						# This is the beginning of an animation, and
@@ -898,12 +909,18 @@ class UnitSchematicDatabase:
 						anim = Animation.from_string(string)
 						self.schematics[unit_index].action_animations[action_index] = anim
 						unit_index, unit_schematic = next((i,s) for i,s in enumerate(self.schematics) if s.name == match[1])
-						action_index = next(i for i,a in enumerate(unit_schematic.action_schematics))						
+						action_index = next(i for i,a in enumerate(unit_schematic.action_schematics) if a.name == match[2])
 						string = line
 				else:
 					string += line
 
 				line = f.readline()
+
+			if string:
+				# If there's still an animation, add it
+				anim = Animation.from_string(string)
+				self.schematics[unit_index].action_animations[action_index] = anim
+
 
 
 	def get_schematic_by_name(self, name):
@@ -1097,6 +1114,8 @@ class Turn:
 					self.end_turn(friendlies=friendlies, enemies=enemies)
 				else:
 					enemies[self.current_enemy].start_random_action(allies=enemies, enemies=friendlies)
+		if self.current_enemy == None and self.player_active == False:
+			self.end_turn(friendlies=friendlies, enemies=enemies)
 
 def friendly_slot_intersect(pos, slot):
 	"""Returns True if [pos] is within the bounds of friendly slot [slot]"""
@@ -1120,6 +1139,11 @@ def enemy_slot_intersect(pos, slot):
 	else:
 		return False
 
+def slot_intersect(pos, team, slot):
+	if team == 0:
+		return friendly_slot_intersect(pos=pos, slot=slot)
+	elif team == 1:
+		return enemy_slot_intersect(pos=pos, slot=slot)
 
 
 def friendly_is_valid_target(action, target):
@@ -1241,7 +1265,9 @@ class MainMenuState:
 
 class BattleState:
 	def __init__(self):
-		self.turn = Turn(initial_active=True)
+		#self.turn = Turn(initial_active=True)
+		self.is_player_turn = True
+		self.active_subturn_slot = 0 # The slot which has the enemy currently doing its own subturn
 		# action_state represents what action the play is currently doing (after clicking a card, it might be "targeting")
 		self.action_state = "Action Select"
 		self.target_start_pos = Vec(0,0)
@@ -1251,7 +1277,7 @@ class BattleState:
 		self.friendlies = []
 		self.enemies = []
 
-		# Set up warrior and put in slot 0
+		# Set up warrior and put in slot 0, usw.
 		warrior_unit = game.unit_db.generate_unit(name="Warrior", team=0, slot=0)
 		rogue_unit = game.unit_db.generate_unit(name="Rogue", team=0, slot=1)
 		self.friendlies.append(warrior_unit)
@@ -1265,11 +1291,53 @@ class BattleState:
 		self.enemies.append(wolf2_unit)
 		self.enemies.append(human_unit)
 		self.enemies.append(human2_unit)
+	def get_valid_targets(self, source_unit, target_set):
+		if target_set == TargetSet.All:
+			return self.friendlies+self.enemies
+		elif target_set == TargetSet.Self:
+			return [source_unit]
+		elif target_set == TargetSet.OtherAlly:
+			if source_unit.team == 0:
+				return [u for u in self.friendlies if u != source_unit]
+			elif source_unit.team == 1:
+				return [u for u in self.enemies if u != source_unit]
+		elif target_set == TargetSet.SingleAlly or target_set == TargetSet.AllAllies:
+			if source_unit.team == 0:
+				return self.friendlies
+			elif source_unit.team == 1:
+				return self.enemies
+		elif target_set == TargetSet.SingleEnemy or target_set == TargetSet.AllEnemies:
+			if source_unit.team == 0:
+				return self.enemies
+			elif source_unit.team == 1:
+				return self.friendlies
+	def end_turn(self):
+		if self.is_player_turn:
+			# Perform cleanup associated with ending PLAYER turn
+			# and starting ENEMY turn
+			self.is_player_turn = False
+			self.active_subturn_slot = 0
+			self.enemies[self.active_subturn_slot].start_random_action(allies=self.enemies, enemies=self.friendlies)
+		else:
+			# Perform cleanup associated with ending ENEMY turn
+			# and starting player turn
+			self.is_player_turn = True
+			for f in self.friendlies:
+				f.action_points = 1			
 	def update(self, game):
-		if self.turn.player_active:
+
+
+		if self.is_player_turn:
+			# End turn if player presses Q
 			if game.input.pressed(key=pg.K_q):
-				self.turn.end_turn(friendlies=self.friendlies, enemies=self.enemies)
-			if game.input.pressed(button=0): # Left mouse pressed
+				self.end_turn()
+			# End turn if action points are at 0 for all allies
+			if len([e for e in self.friendlies if e.action_points > 0]) == 0:
+				self.end_turn()
+			# Handle left mouse button press
+			# 	* Select the hovered action if no action is selected
+			# 	* Select the hovered target if an action has already been selected
+			if game.input.pressed(button=0):
 				if self.action_state == "Action Select":
 					for friendly in self.friendlies:
 						if friendly.action_points > 0:
@@ -1279,57 +1347,37 @@ class BattleState:
 									self.selected_action_button = button
 
 				elif self.action_state == "Target Select":
-					for friendly in self.friendlies:
-						if friendly.alive is False:
+					action = self.selected_action_button.linked_action
+					owner = self.selected_action_button.linked_action.owner
+					valid_targets = self.get_valid_targets(source_unit=owner, target_set=action.target_set)
+					for target in [e for e in self.friendlies+self.enemies if e in valid_targets]:
+						if target.alive is False:
 							continue
-						if friendly_slot_intersect(pos=Vec(game.mouse_pos.x, game.mouse_pos.y), slot=friendly.slot):
-							action = self.selected_action_button.linked_action
-							owner = self.selected_action_button.linked_action.owner
-							if action.target_set is TargetSet.All:
-								action.execute(kwargs={	'source': owner,
-														'targets': self.friendlies+self.enemies})
-								owner.action_points -= 1
-							elif action.target_set is TargetSet.SingleAlly:
-								action.execute(kwargs={	'source': owner,
-														'targets': [friendly]})
-								owner.action_points -= 1
-							elif action.target_set == TargetSet.Self and friendly == owner:
-								action.execute(kwargs={	'source': owner,
-														'targets': [owner]})
-								owner.action_points -= 1
-							elif action.target_set is TargetSet.AllAllies:
-								action.execute(kwargs={	'source': owner,
-														'targets': self.friendlies})
-								owner.action_points -= 1
-					for enemy in self.enemies:
-						if enemy.alive is False:
-							continue
-						if enemy_slot_intersect(pos=Vec(game.mouse_pos.x, game.mouse_pos.y), slot=enemy.slot):
-							action = self.selected_action_button.linked_action
-							owner = self.selected_action_button.linked_action.owner
-							if action.target_set is TargetSet.All:
-								action.execute(kwargs={	'source': owner,
-														'targets': self.friendlies+self.enemies})
-								owner.action_points -= 1								
-							elif action.target_set is TargetSet.SingleEnemy:
-								action.execute(kwargs={	'source': owner,
-														'targets': [enemy]})
-								owner.action_points -= 1
-							elif action.target_set is TargetSet.AllEnemies:
-								action.execute(kwargs={	'source': owner,
-														'targets': self.enemies})
-								owner.action_points -= 1
 
-
-							#self.turn.end_turn(friendlies=self.friendlies, enemies=self.enemies)
+						if slot_intersect(pos=game.mouse_pos, team=target.team, slot=target.slot):
+							owner.start_action(action=action, targeted=target, valid_targets=valid_targets)
 
 					self.action_state = "Action Select"
 
-			if game.input.pressed(button=2): # Right mouse pressed
+			# Handle right mouse button press
+			#	* If an action has been selected, deselect it so another one can be selected.
+			if game.input.pressed(button=2):
 				if self.action_state == "Target Select":
-					self.action_state = "Action Select"		
+					self.action_state = "Action Select"
+		else: # (if it is NOT the player's turn)
+			if self.enemies[self.active_subturn_slot].action_finished == True:
+				self.active_subturn_slot += 1
+				if self.active_subturn_slot > last_index(self.enemies):
+					# All enemies have done their subturns, so it is now the player's turn
+					self.end_turn()
+				else:
+					self.enemies[self.active_subturn_slot].start_random_action(allies=self.enemies, enemies=self.friendlies)
 
-		self.turn.update(friendlies=self.friendlies, enemies=self.enemies)
+
+
+		#self.turn.update(friendlies=self.friendlies, enemies=self.enemies)
+		for friendly in self.friendlies:
+			friendly.update()
 		for enemy in self.enemies:
 			enemy.update()
 
@@ -1370,11 +1418,6 @@ class BattleState:
 				if action.owner.alive == True and friendly_slot_intersect(pos=game.mouse_pos, slot=action.owner.slot):
 					previewed_target_set = [action.owner]
 
-		# End turn if action points are at 0 for all allies
-		if self.turn.player_active == True:
-			if len([e for e in self.friendlies if e.action_points > 0]) == 0:
-				self.turn.end_turn(friendlies=self.friendlies, enemies=self.enemies)			
-
 		# Draw friendlies
 		for friendly in self.friendlies:
 			if friendly in previewed_target_set and self.action_state == "Target Select":
@@ -1390,7 +1433,7 @@ class BattleState:
 				back_surface.set_alpha(20)
 				back_surface.fill(c.white)
 
-				if self.turn.player_active == True:
+				if self.is_player_turn == True:
 					highlight_surface = Surface(Vec(200,screen_height))
 					highlight_surface.set_alpha(30)
 					if friendly.action_points == 0:
@@ -1401,7 +1444,13 @@ class BattleState:
 					game.queue_surface(	surface=highlight_surface,
 										pos=Vec(friendly_slot_positions[friendly.slot], 0),
 										depth=-1)
-				friendly.draw(target=game.screen, mouse_pos=game.mouse_pos)
+
+				if self.action_state == "Target Select":
+					preview_action = self.selected_action_button.linked_action
+				else:
+					preview_action = None
+
+				friendly.draw(target=game.screen, mouse_pos=game.mouse_pos, preview_action=preview_action)
 
 		# Draw enemies
 		for enemy in self.enemies:

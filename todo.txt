@@ -1,0 +1,6 @@
+\* Tweens with negative values in the end_pos don't work properly.
+	=> It's because I'm not parsing negative numbers properly in the regex
+\* Tweens with negative jerk throw an error when t=0 (because 0 to a negative power)
+*Implement multiples tweens in .dat loading
+*Fix crash when there's a move in animations.dat that doesn't match with the given unit name.
+	=> On top of that, some general error reporting when the animations are invalidly defined would be good too
