@@ -24,3 +24,12 @@ pink = (255,200,200)
 blue_green = (0,150,150)
 
 # Game parameters
+
+# Editor layout parameters
+
+# Unit Editor
+unit_ui_indices = [	'name',
+					'description',
+					'vigor',
+					'armor',
+					'focus']

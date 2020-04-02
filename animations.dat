@@ -3,7 +3,7 @@ Warrior's Rest
 	has tween
 		duration is 60
 		starts at (0,0)
-		ends at (-100,0)
+		ends at (0,-10)
 		jerk is 1.0
 	has sub-animation
 		duration is 60
@@ -78,10 +78,10 @@ Rogue's Medium Bash
 Wolf's Bite
 	duration is 60
 	has tween
-		duration is 30
+		duration is 60
 		starts at (0,0)
 		ends at (-50,0)
-		jerk is 5.0
+		jerk is 0.2
 	has sub-animation
 		duration is 60
 		sprite is "WolfIdle.png"
@@ -89,7 +89,7 @@ Wolf's Bite
 Wolf's Howl
 	duration is 60
 	has tween
-		duration is 30
+		duration is 60
 		starts at (0,0)
 		ends at (50,0)
 		jerk is 0.2
@@ -97,3 +97,36 @@ Wolf's Howl
 		duration is 60
 		sprite is "WolfEnemyHowl.png"
 		anchor is bottom left
+Human's Heal
+	duration is 60
+	has tween
+		duration is 60
+		starts at (0,0)
+		ends at (30,0)
+		jerk is 2
+	has sub-animation
+		duration is 60
+		sprite is "HumanIdle.png"
+		anchor is bottom left
+Human's Rig Up
+	duration is 60
+	has tween
+		duration is 60
+		starts at (0,0)
+		ends at (-50,0)
+		jerk is 1
+	has sub-animation
+		duration is 60
+		sprite is "HumanIdle.png"
+		anchor is bottom left
+Human's Attack
+	duration is 60
+	has tween
+		duration is 60
+		starts at (0,0)
+		ends at (-100,0)
+		jerk is 0.2
+	has sub-animation
+		duration is 60
+		sprite is "HumanIdle.png"
+		anchor is bottom left				

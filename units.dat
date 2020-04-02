@@ -1,8 +1,8 @@
 name is Warrior
 	has description "Strong fighter; focuses on high damage output."
 	uses sprite "WarriorIdle.png"
-	has 50 Vigor
-	has 10 Armor
+	has 20 Vigor
+	has 4 Armor
 	has 5 Focus
 	has action Rest
 	has action Medium Strike
@@ -11,14 +11,14 @@ name is Warrior
 name is Rogue
 	has description "Medium-strength fighter; focuses on debuffs."
 	uses sprite "RogueIdle.png"
-	has 25 Vigor
-	has 5 Armor
-	has 10 Focus
+	has 15 Vigor
+	has 2 Armor
+	has 8 Focus
 	has action Intimidate
 	has action Light Strike
 	has action Medium Bash
 name is Wolf
-	has description "Weak by itself, but strong in packs.""
+	has description "Weak by itself, but strong in packs."
 	uses sprite "WolfIdle.png"
 	has 5 Vigor
 	has 0 Armor

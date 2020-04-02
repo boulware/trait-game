@@ -11,17 +11,42 @@ from enum import Enum
 from copy import copy, deepcopy
 
 import debug
-from util import InputState, last_index
+from util import InputState, last_index, is_positive_index, in_range
+import util
 from harm_math import Vec, Rect
 from harm_animation import Tween, Animation
 from harm_draw import Surface, draw_surface, darken_color, draw_line, draw_rect, draw_text, AlignX, AlignY, draw_x, draw_text_wrapped
 import constants as c
+
+typeable_chars = 	  [chr(i) for i in range(ord('a'),ord('z')+1)] \
+					+ [chr(i) for i in range(ord('A'),ord('Z')+1)] \
+					+ [chr(i) for i in range(ord('0'),ord('9')+1)] \
+					+ [' ', '.']
 
 random.seed()
 
 import pygame as pg
 screen_width, screen_height = 1400,800
 game = None
+
+# -- State class template -- 
+
+# class State:
+# 	def __init__(self):
+# 		pass
+# 	def draw(self, game):
+# 		pass
+# 	def update(self, game):
+# 		pass
+# 	def key_pressed(self, game, key, mod, translated):
+# 		pass
+# 	def mouse_button_pressed(self, game, button):
+#  		pass
+#  	def enter(self):
+#  		pass
+#  	def exit(self):
+#  		pass
+
 
 pg.font.init()
 main_font_10 = pg.font.Font("font.ttf", 28)
@@ -61,6 +86,11 @@ class T(Enum):
 trait_count = 3
 trait_colors = {T.Vigor: c.red, T.Armor:c.yellow, T.Focus: c.ltblue}
 trait_strings = {T.Vigor: "Vigor", T.Armor: "Armor", T.Focus: "Focus"}
+
+pointer_cursor_surface = Surface.from_file("Cursor.png")
+
+edit_cursor_surface = Surface.from_file("CursorEdit.png")
+edit_cursor_surface.set_anchor(Vec(6,10))
 
 sword_surfaces = {	T.Vigor: Surface.from_file("RedSword.png"),
 					T.Armor: Surface.from_file("YellowSword.png"),
@@ -531,7 +561,7 @@ class Action:
 		valid_target = False
 
 		if self.target_set == TargetSet.OtherAlly:
-			for ally in game.state.get_allies(team=self.owner.team):
+			for ally in game.active_state.get_allies(team=self.owner.team):
 				if ally.alive == True and ally != self.owner:
 					valid_target = True
 		else:
@@ -922,7 +952,8 @@ class UnitSchematicDatabase:
 				self.schematics[unit_index].action_animations[action_index] = anim
 
 
-
+	def get_list_of_schematic_names(self):
+		return [s.name for s in self.schematics]
 	def get_schematic_by_name(self, name):
 		return next(s for s in self.schematics if s.name == name)				
 	def generate_unit(self, name, team, slot):
@@ -1168,6 +1199,67 @@ def enemy_is_valid_target(action, target):
 
 	return False
 
+
+
+class MainMenuState:
+	def __init__(self):
+		self.buttons = []
+		self.buttons.append(Button(	pos=Vec(100,100),
+									size=Vec(150,70),
+									text="Start Campaign",
+									function=lambda: game.start_campaign()))		
+		self.buttons.append(Button(	pos=Vec(100,170),
+									size=Vec(150,70),
+									text="Test Battle",
+									function=lambda: game.start_battle()))
+		self.buttons.append(Button(	pos=Vec(100,240),
+									size=Vec(150,70),
+									text="Editor",
+									function=lambda: game.start_editor()))
+		self.buttons.append(Button(	pos=Vec(100,310),
+									size=Vec(150,70),
+									text="Exit",
+									function=lambda: sys.exit()))		
+
+	def enter(self):
+		pass
+	def exit(self):
+		sys.exit()
+	def draw(self, game):
+		for button in self.buttons:
+			button.draw(game=game)
+
+		game.queue_surface(surface=pointer_cursor_surface, depth=-100, pos=game.mouse_pos)
+
+	def update(self, game):
+		for button in self.buttons:
+			button.update(game=game)
+
+	def mouse_button_pressed(self, game, button, mouse_pos):
+		pass
+	def key_pressed(self, game, key, mod, translated):
+		pass
+
+# class Button:
+# 	def __init__(self, rect, font, text):
+# 		self.rect = rect		
+# 		self.font = font
+# 		self.text = text
+
+# 	def draw(self, game):
+# 		# Button background color
+# 		game.queue_drawrect(pos=self.rect.top_left,
+# 							size=self.rect.size,
+# 							color=c.ltgrey,
+# 							width=0,
+# 							depth=-2)		
+# 		# Button border
+# 		game.queue_drawrect(pos=self.rect.top_left,
+# 							size=self.rect.size,
+# 							color=c.white,
+# 							width=1,
+# 							depth=-1)
+
 class Button:
 	def __init__(self, pos, size, text, function):
 		self.pos = pos
@@ -1237,31 +1329,442 @@ class Button:
 
 		return False
 
+class TextBox:
+	def __init__(self, rect, font, initial_text=''):
+		self.rect = rect		
+		self.font = font
+		self.text = initial_text
 
+		self.char_rects = []
+		self.refresh_char_rects()
 
-class MainMenuState:
-	def __init__(self):
-		self.buttons = []
-		self.buttons.append(Button(	pos=Vec(100,100),
-									size=Vec(150,70),
-									text="Start Battle",
-									function=lambda: game.start_battle()))
-		self.buttons.append(Button(	pos=Vec(100,170),
-									size=Vec(150,70),
-									text="Editor",
-									function=lambda: print("Entered editor")))
-		self.buttons.append(Button(	pos=Vec(100,240),
-									size=Vec(150,70),
-									text="Exit",
-									function=lambda: sys.exit()))		
-	def draw(self, game):
-		for button in self.buttons:
-			button.draw(game=game)
+		self.focused = False
+		self._cursor_pos = 0
+
+		self.highlight_start = None
+		self.highlight = [0,0] # Indices of the start and end of the text highlight
+
+		# Controls the blinking of the edit cursor.
+		# blink_timer is the frame counter
+		# Toggles visibility every time blink_period frames have elapsed
+		self.blink_visible = True
+		self.blink_timer = 0
+		self.blink_period = 30
+	@property
+	def text(self):
+		return self._text
+	@text.setter
+	def text(self, text):
+		self._text = text
+		self.refresh_char_rects()
+		self.blink_visible = True
+		self.blink_timer = 0		
+
+	@property
+	def cursor_pos(self):
+		return self._cursor_pos
+	@cursor_pos.setter
+	def cursor_pos(self, cursor_pos):
+		self._cursor_pos = cursor_pos
+		self.blink_visible = True
+		self.blink_timer = 0
+	
+	
+	def refresh_char_rects(self, start_index=0):
+		'''Calculate the positions of each character in self.text,
+		to use to place the edit cursor.
+
+		start_pos tells the function to start at a specific index of
+		self.text, so we don't have to calculate all char_x_positions
+		when only some of them at the end of the string changed.'''
+		self.char_rects = []
+		for i in range(start_index, len(self.text)):
+			sub_string = self.text[0:i]
+			sub_string_width, _ = self.font.size(sub_string)
+			char_width, _ = self.font.size(self.text[i])
+
+			pos = Vec(sub_string_width, 0)
+			size = Vec(char_width, self.rect.height)
+			self.char_rects.append(Rect(pos=pos, size=size))
+			#self.char_x_positions.append(w)
+
+		string_width, _ = self.font.size(self.text)
+		self.char_rects.append(Rect(pos=Vec(string_width, 0), size=Vec(0,0)))
+
+	def pos_to_char_index(self, pos):
+		rel_x, _ = pos - self.rect.top_left
+
+		char_index = 0
+
+		if len(self.text) == 0:
+			# Empty string should return left-most pos in textbox (index 0)
+			return char_index
+
+		# TODO: A binary search would probably be faster here, if it's necessary		
+		for i, r in enumerate(self.char_rects):
+			if rel_x < r.center.x:
+				char_index = i
+				break
+
+		if rel_x >= self.char_rects[-1].center.x:
+			char_index = last_index(self.char_rects)
+
+		return char_index
+
+	def highlight_all(self):
+		self.cursor_pos = last_index(self.char_rects)
+		self.highlight = [0, last_index(self.char_rects)]
+
+	def focus(self, mouse_pos=None):
+		'''Set this textbox to edit mode with the cursor at the correct pos'''
+		self.focused = True
+
+		if mouse_pos != None:
+			rel_pos = mouse_pos - self.rect.top_left
+			self.cursor_pos = self.pos_to_char_index(pos=mouse_pos)
+
+			self.highlight_start = self.cursor_pos
+		else:
+			self.cursor_pos = 0
+	
+
+	def unfocus(self):
+		self.focused = False
+		self.highlight = [0,0]
+
+	def _backspace(self):
+		if self.highlight[0] == self.highlight[1]:
+			if self.cursor_pos == 0:
+				# Backspace does nothing if cursor is completely to the left.
+				return			
+			self.text = self.text[0:self.cursor_pos-1] + self.text[self.cursor_pos:]
+			self.cursor_pos = max(0, self.cursor_pos-1)
+		else:
+			start = self.highlight[0]
+			end = self.highlight[1]
+			self.text = self.text[0:start] + self.text[end:]
+
+			self.cursor_pos = start
+
+		self.highlight = [self.cursor_pos, self.cursor_pos]
+
+	def _delete(self):
+		if self.cursor_pos == last_index(self.char_rects):
+			# Delete does nothing if cursor is completely to the right.
+			return
+
+		i = self.cursor_pos
+		self.text = self.text[0:i] + self.text[i+1:]
+
+	def _cursor_left(self, highlight=False):
+		start_pos = self.cursor_pos
+
+		if highlight == True:
+			self.cursor_pos = max(self.cursor_pos-1, 0)			
+			if start_pos == self.highlight[0]:
+				self.highlight[0] = self.cursor_pos
+			elif start_pos == self.highlight[1]:
+				self.highlight[1] = self.cursor_pos
+			else:
+				print("self.cursor_pos is not equal to either highlight[0] nor highlight[1]. Something went wrong.")
+		elif highlight == False:
+			if self.highlight[0] != self.highlight[1]:
+				self.cursor_pos = self.highlight[0]
+			else:
+				self.cursor_pos = max(self.cursor_pos-1, 0)
+
+			self.highlight = [self.cursor_pos, self.cursor_pos]
+
+		if self.highlight[0] > self.highlight[1]:
+			buf = self.highlight[0]
+			self.highlight[0] = self.highlight[1]
+			self.highlight[1] = buf
+
+	def _cursor_right(self, highlight=False):
+		start_pos = self.cursor_pos
+
+		if highlight == True:
+			self.cursor_pos = min(self.cursor_pos+1, len(self.char_rects)-1)				
+			if start_pos == self.highlight[0]:
+				self.highlight[0] = self.cursor_pos
+			elif start_pos == self.highlight[1]:
+				self.highlight[1] = self.cursor_pos
+			else:
+				print("self.cursor_pos is not equal to either highlight[0] nor highlight[1]. Something went wrong.")
+		elif highlight == False:
+			if self.highlight[0] != self.highlight[1]:
+				self.cursor_pos = self.highlight[1]
+			else:
+				self.cursor_pos = min(self.cursor_pos+1, len(self.char_rects)-1)	
+
+			self.highlight = [self.cursor_pos, self.cursor_pos]
+
+		if self.highlight[0] > self.highlight[1]:
+			buf = self.highlight[0]
+			self.highlight[0] = self.highlight[1]
+			self.highlight[1] = buf			
+
 	def update(self, game):
-		for button in self.buttons:
-			button.update(game=game)
+		self.blink_timer += 1
+		if self.blink_timer >= self.blink_period:
+			self.blink_timer = 0			
+			self.blink_visible = not self.blink_visible
+
+	def draw(self, game, debug=False):
+		w, h = main_font_10.size(self.text)		
+
+		# Textbox outline
+		game.queue_drawrect(pos=self.rect.top_left,
+							size=self.rect.size,
+							color=c.ltgrey,
+							width=1,
+							depth=-1)
+		# Highlight background
+		if self.highlight[0] != self.highlight[1]:
+			start_rect = self.char_rects[self.highlight[0]]
+			end_rect = self.char_rects[self.highlight[1]]
+			game.queue_drawrect(pos=self.rect.top_left + start_rect.top_left,
+								size=Vec(end_rect.left - start_rect.left, self.rect.height),
+								color=c.grey,
+								width=0,
+								depth=10)
+		# Text
+		game.queue_drawtext(color=c.white,
+							pos=self.rect.bottom_left-Vec(0,main_font_10.get_linesize()),
+							text=self.text,
+							font=self.font,
+							x_center=False,
+							y_center=False,
+							depth=5)
+
+		if self.focused:
+			if self.blink_visible:
+				x_pos = self.char_rects[self.cursor_pos].left
+				game.queue_drawline(start=Vec(self.rect.left+x_pos, self.rect.top),
+									end=Vec(self.rect.left+x_pos, self.rect.bottom),
+									color=c.red,
+									width=1,
+									depth=-50)
+
+		if debug:
+			for x_pos in self.char_rects[self.cursor_pos].left:
+				game.queue_drawline(start=Vec(self.rect.left+x_pos, self.rect.top),
+									end=Vec(self.rect.left+x_pos, self.rect.bottom),
+									color=c.red,
+									width=1,
+									depth=-50)
+
+	def key_pressed(self, game, key, mod, translated):
+		if self.focused:
+			if key == pg.K_LEFT:
+				highlight = game.input.down(key=pg.K_LSHIFT) or game.input.down(key=pg.K_RSHIFT)
+				self._cursor_left(highlight=highlight)
+			if key == pg.K_RIGHT:
+				highlight = game.input.down(key=pg.K_LSHIFT) or game.input.down(key=pg.K_RSHIFT)
+				self._cursor_right(highlight=highlight)
+			if key == pg.K_BACKSPACE:
+				self._backspace()
+			if key == pg.K_DELETE:
+				self._delete()
+			if key == pg.K_END:
+				self.cursor_pos = last_index(self.char_rects)
+				self.highlight = [self.cursor_pos, self.cursor_pos]
+			if key == pg.K_HOME:
+				self.cursor_pos = 0
+				self.highlight = [self.cursor_pos, self.cursor_pos]				
+
+			if game.input.down(button=0) and self.highlight_start != None:
+				i = self.pos_to_char_index(pos=game.mouse_pos)
+				self.cursor_pos = i
+				if i >= self.highlight_start:
+					self.highlight[0] = self.highlight_start
+					self.highlight[1] = i
+				else:
+					self.highlight[0] = i
+					self.highlight[1] = self.highlight_start
+
+		if translated in typeable_chars:
+			if self.highlight[0] == self.highlight[1]:
+				i = self.cursor_pos
+				self.text = self.text[0:i] + translated + self.text[i:]
+				self.cursor_pos += 1
+			else:
+				start = self.highlight[0]
+				end = self.highlight[1]
+				self.text = self.text[0:start] + translated + self.text[end:]
+
+				self.cursor_pos = start + 1
+
+			self.highlight = [self.cursor_pos, self.cursor_pos]
 
 
+class EditorState:
+	def __init__(self):
+		self.entry_list_start = Vec(0, 100)
+		self.entry_height = 50
+		self.left_pane_width = 400
+
+		self.selected_entry = None
+		self.focused_index = None
+		self.ui_elements = [None] * len(c.unit_ui_indices)
+		# Name textbox
+		for i, property_string in enumerate(c.unit_ui_indices):
+			self.ui_elements[i] = TextBox(	rect=Rect(	pos=Vec(self.left_pane_width + 20, 50+i*50),
+														size=Vec(150, 50)),
+											font=main_font_10,
+											initial_text="<{}>".format(property_string))
+
+		# self.ui_elements[unit_name_ui_index] = 	TextBox(rect=Rect(	pos=Vec(self.left_pane_width + 20, 50),
+		# 															size=Vec(150, 50)),
+		# 												font=main_font_10,
+		# 												initial_text="<NAME>")
+
+		# # Description textbox
+		# self.ui_elements[unit_description_ui_index] =	TextBox(rect=Rect(	pos=Vec(self.left_pane_width + 20, 100),
+		# 																	size=Vec(150, 50)),
+		# 														font=main_font_5,
+		# 														initial_text="<DESCRIPTION>")
+
+		# # Trait value textboxes
+		# self.ui_elements[] =	TextBox(rect=Rect(	pos=Vec(self.left_pane_width + 20, 150),
+		# 											size=Vec(150, 50)),
+		# 								font=main_font_5,
+		# 								initial_text="<VIGOR>")
+		# self.ui_elements[] =	TextBox(rect=Rect(	pos=Vec(self.left_pane_width + 20, 200),
+		# 											size=Vec(150, 50)),
+		# 								font=main_font_5,
+		# 								initial_text="<ARMOR>")
+		# self.ui_elements[] =	TextBox(rect=Rect(	pos=Vec(self.left_pane_width + 20, 250),
+		# 											size=Vec(150, 50)),
+		# 								font=main_font_5,
+		# 								initial_text="<FOCUS>")	
+	def enter(self):
+		pass
+	def exit(self):
+		pass								
+	def update(self, game):
+		# Left Pane
+
+		# Index of entry in the left pane which is currently hovered.
+		entry_hover_index = math.floor(float(game.mouse_pos.y - self.entry_list_start.y) / float(self.entry_height))
+
+		x, y = self.entry_list_start
+		unit_names = game.unit_db.get_list_of_schematic_names()
+		# Draw entries in left pane
+		for i, name in enumerate(unit_names):
+			game.queue_drawline(start=Vec(0,y),
+								end=Vec(self.left_pane_width,y),
+								color=c.grey,
+								depth=-1)
+			game.queue_drawtext(color=c.white,
+								pos=Vec(x,y),
+								text=name,
+								font=main_font_10,
+								x_center=False,
+								y_center=False,
+								depth=10)
+			y += 50
+
+		if game.input.pressed(button=0):
+			if self.focused_index != None:
+				self.ui_elements[self.focused_index].unfocus()
+				self.focused_index = None
+
+		if len(self.ui_elements) > 0:
+			if game.input.pressed(key=pg.K_TAB):
+				if self.focused_index == None:
+					self.focused_index = 0
+				else:
+					self.ui_elements[self.focused_index].unfocus()
+					
+					self.focused_index += 1
+					if self.focused_index > last_index(self.ui_elements):
+						self.focused_index = 0
+
+				self.ui_elements[self.focused_index].focus()
+				self.ui_elements[self.focused_index].highlight_all()
+
+
+		if in_range(entry_hover_index, 0, len(unit_names)) and game.mouse_pos.x <= self.left_pane_width:
+			game.queue_drawrect(color=c.ltgrey,
+								pos=Vec(0,self.entry_list_start.y+entry_hover_index*self.entry_height),
+								size=Vec(self.left_pane_width, self.entry_height),
+								depth=50)
+
+			if game.input.pressed(button=0):
+				self.selected_entry = game.unit_db.get_schematic_by_name(name=unit_names[entry_hover_index])
+				self.ui_elements[c.unit_ui_indices.index('name')].text = self.selected_entry.name
+				self.ui_elements[c.unit_ui_indices.index('description')].text = self.selected_entry.description
+				self.ui_elements[c.unit_ui_indices.index('vigor')].text = str(self.selected_entry.traits[T.Vigor])
+				self.ui_elements[c.unit_ui_indices.index('armor')].text = str(self.selected_entry.traits[T.Armor])
+				self.ui_elements[c.unit_ui_indices.index('focus')].text = str(self.selected_entry.traits[T.Focus])
+
+
+
+
+		# Right pane
+
+		textbox_hovered = False
+		if self.selected_entry != None:
+			for i, t in enumerate(self.ui_elements):
+				t.draw(game=game, debug=False)
+
+				if t.rect.intersect(point=game.mouse_pos):
+					textbox_hovered = True					
+					if game.input.pressed(button=0):
+						# Left mouse pressed while hovering a textbox
+						if self.focused_index != None:
+							self.ui_elements[self.focused_index].unfocus()
+						t.focus(mouse_pos=game.mouse_pos)
+						self.focused_index = i
+
+		if self.focused_index != None:
+			# Stuff to check if there's a currently focused UI element
+			pass
+
+
+		if textbox_hovered:
+			game.queue_surface(surface=edit_cursor_surface, depth=-100, pos=game.mouse_pos)
+		else:
+			game.queue_surface(surface=pointer_cursor_surface, depth=-100, pos=game.mouse_pos)
+
+		for t in self.ui_elements:
+			t.update(game=game)
+
+	def draw(self, game):
+		# Separator line between left and right pane
+		game.queue_drawline(	start=Vec(self.left_pane_width, 0),
+								end=Vec(self.left_pane_width, screen_height),
+								color=c.green,
+								depth=-1)
+	def mouse_button_pressed(self, game, button, mouse_pos):
+		pass
+	def key_pressed(self, game, key, mod, translated):
+		if self.focused_index != None:
+			self.ui_elements[self.focused_index].key_pressed(game=game, key=key, mod=mod, translated=translated)
+
+class ShopState:
+	def __init__(self):
+		pass
+	def draw(self, game):
+		game.queue_surface(	surface=pointer_cursor_surface,
+							pos=game.mouse_pos,
+							depth=-1)
+		game.queue_drawtext(color=c.light_red,
+							text="Shop",
+							font=main_font_10,
+							pos=Vec(screen_width/2, 100),
+							depth=0)
+	def update(self, game):
+		pass
+	def key_pressed(self, game, key, mod, translated):
+		pass
+	def mouse_button_pressed(self, game, button):
+		pass
+	def enter(self):
+		pass
+	def exit(self):
+		pass
 
 class BattleState:
 	def __init__(self):
@@ -1291,6 +1794,10 @@ class BattleState:
 		self.enemies.append(wolf2_unit)
 		self.enemies.append(human_unit)
 		self.enemies.append(human2_unit)
+	def enter(self):
+		pass
+	def exit(self):
+		pass		
 	def get_valid_targets(self, source_unit, target_set):
 		if target_set == TargetSet.All:
 			return self.friendlies+self.enemies
@@ -1481,7 +1988,11 @@ class BattleState:
 
 			game.queue_surface(surface=surface, depth=-10, pos=Vec(0,0))				
 	def draw(self, game):
-		pass
+		game.queue_surface(surface=pointer_cursor_surface, depth=-100, pos=game.mouse_pos)		
+	def mouse_button_pressed(self, game, button, mouse_pos):
+		pass		
+	def key_pressed(self, game, key, mod, translated):
+		pass		
 	def get_allies(self, team):
 		if team == 0:
 			return self.friendlies
@@ -1493,6 +2004,92 @@ class BattleState:
 		if team == 1:
 			return self.friendlies	
 
+class RoomType(Enum):
+	Battle = 0
+	Shop = 1
+
+class Room:
+	def __init__(self, room_type):
+		self.room_type = room_type
+	def enter(self):
+		if self.room_type == RoomType.Battle:
+			return BattleState()
+		elif self.room_type == RoomType.Shop:
+			return ShopState()
+
+class CampaignState:
+	def __init__(self):
+		self.rooms = [Room(room_type=RoomType.Battle) for i in range(4)]
+		self.rooms.append(Room(room_type=RoomType.Shop))
+	def room_index_to_rect(self, i):
+		return Rect(	pos=Vec(100+100*i,screen_height/2),
+						size=Vec(50,50))
+
+	def enter_room(self, index):
+		return self.rooms[index].enter()
+	def enter(self):
+		pass
+	def exit(self):
+		pass
+	def update(self, game):
+		pass
+
+
+	def draw(self, game):
+		game.queue_surface(surface=pointer_cursor_surface, depth=-100, pos=game.mouse_pos)
+		game.queue_drawtext(color=c.white,
+							pos=Vec(50,50),
+							text="Campaign",
+							font=main_font_10,
+							depth=0,
+							x_center=False,
+							y_center=False)
+	
+		for i, room in enumerate(self.rooms):
+			room_rect = self.room_index_to_rect(i)
+			if room_rect.intersect(point=game.mouse_pos):
+				color = c.white
+			else:
+				color = c.ltgrey
+
+			game.queue_drawrect(color=color,
+								pos=room_rect.pos,
+								size=room_rect.size,
+								depth=5,
+								width=-3)
+
+			if room.room_type == RoomType.Battle:
+				text = 'B'
+			elif room.room_type == RoomType.Shop:
+				text = 'S'
+
+			game.queue_drawtext(color=color,
+								text=text,
+								pos=room_rect.center,
+								font=main_font_7,
+								depth=4)
+
+		for i, r in enumerate(zip(self.rooms, self.rooms[1:])):
+			start = self.room_index_to_rect(i).center_right
+			end = 	self.room_index_to_rect(i+1).center_left
+			game.queue_drawline(start=start,
+								end=end,
+								color=c.grey,
+								depth=10,
+								width=5)
+
+	def mouse_button_pressed(self, game, button, mouse_pos):
+		if button == 1: # Left mouse button
+			for i, room in enumerate(self.rooms):
+				room_rect = self.room_index_to_rect(i)
+
+				if room_rect.intersect(point=mouse_pos):
+					game.enter_state(room.enter())
+
+
+	def key_pressed(self, game, key, mod, translated):
+		pass
+
 class Game:
 	def __init__(self):
 		global game
@@ -1500,26 +2097,49 @@ class Game:
 
 		pg.init()
 		self.screen = Surface.from_pgsurface(pg.display.set_mode((screen_width, screen_height)))
+		pg.mouse.set_visible(False)		
+		pg.key.set_repeat(250, 32)
 
 		self.action_db = ActionSchematicDatabase(action_data_filepath="actions.dat")
 		self.unit_db = UnitSchematicDatabase(unit_data="units.dat", animation_data="animations.dat")
 
-		self.state = MainMenuState()
+		self.state_stack = []
+		self.enter_state(MainMenuState())
 		self.active_animations = []
 		self.draw_queue = []
 		self.game_clock = pg.time.Clock()
 		self.input = InputState(	p_keys=None, keys=None,
 									p_buttons=None, buttons=None,
-									keypress_delay_interval=15, keypress_repeat_interval=3)
+									keypress_delay_interval=15, keypress_repeat_interval=2)
 
 		# Activate debug mode if terminal line flag '-d' is given
 		if len(sys.argv) >= 2 and sys.argv[1] == '-d':
 			debug.debugger = debug.DebugUI(game=self, active=True)
+		if len(sys.argv) >= 2 and sys.argv[1] == '-e':
+			self.enter_state(EditorState())
+
+	@property
+	def active_state(self):
+		return self.state_stack[-1]
+
+	def enter_state(self, state):
+		state.enter()
+		self.state_stack.append(state)
+
+	def exit_state(self):
+		self.active_state.exit()
+		self.state_stack = self.state_stack[:-1]
+
+		# Clear all queue'd draw calls, otherwise there are
+		# phantom animations that carry over between states.
+		self.draw_queue = []
+		self.active_animations = []
+	
 	def draw(self):
 		# Clear screen
 		self.screen.fill(c.dkgrey)
 
-		self.state.draw(game=self)
+		self.active_state.draw(game=self)
 
 		# Draw each animation in active_animation at its position
 		for data in self.active_animations:
@@ -1530,11 +2150,13 @@ class Game:
 
 		# Draw each surface in draw_queue at its position
 		for e in self.draw_queue:
-			surface = e[1]
-			pos = e[2]
-			draw_surface(	target=self.screen,
-							surface=surface,
-							pos=pos)
+			e[1]()
+			# surface = e[1]
+			# pos = e[2]
+			# draw_surface(	target=self.screen,
+			# 				surface=surface,
+			# 				pos=pos)
+
 
 		# Draw FPS text in top left corner
 		draw_text(	target=self.screen, color=c.green,
@@ -1554,9 +2176,13 @@ class Game:
 			if event.type == pg.QUIT:
 				sys.exit()
 			elif event.type == pg.KEYDOWN:
-				self.input.set_repeat_key(event.key)
+				#self.input.set_repeat_key(event.key)
+				self.active_state.key_pressed(game=self, key=event.key, mod=event.mod, translated=event.unicode)
 			elif event.type == pg.KEYUP:
 				self.input.unset_repeat_key(event.key)
+			elif event.type == pg.MOUSEBUTTONDOWN:
+				mouse_pos = Vec.fromtuple(event.pos)
+				self.active_state.mouse_button_pressed(game=self, button=event.button, mouse_pos=mouse_pos)
 
 		# Clear draw queue for this frame
 		self.draw_queue = []		
@@ -1577,24 +2203,55 @@ class Game:
 		self.mouse_pos = Vec(mouse_x, mouse_y)
 
 		if self.input.pressed(key=pg.K_ESCAPE):
-			self.state = MainMenuState()
+			self.exit_state()
 
 		# Update our active state
-		self.state.update(game=self)
+		self.active_state.update(game=self)
 
 		# Draw all our queue'd up surfaces and animations
 		self.draw()
 
 		# Tick and frame limit to 60
 		self.game_clock.tick(60)
+	def queue_drawline(self, start, end, color, depth, width=1):
+		self.draw_queue.append( (depth,
+								 lambda: draw_line(	target=self.screen,
+								 					color=color,
+								 					start=start,
+								 					end=end,
+								 					width=width)))
+	def queue_drawrect(self, color, pos, size, depth, width=0):
+		self.draw_queue.append( (depth,
+								 lambda: draw_rect(	target=self.screen,
+								 					color=color,
+								 					pos=pos,
+								 					size=size,
+								 					width=width)))
+	def queue_drawtext(self, color, pos, text, font, depth, x_center=True, y_center=True):
+		self.draw_queue.append( (depth,
+								 lambda: draw_text(	target=self.screen,
+								 					color=color,
+								 					pos=pos,
+								 					text=text,
+								 					font=font,
+								 					x_center=x_center,
+								 					y_center=y_center)))
 	def queue_surface(self, surface, depth, pos):
-		self.draw_queue.append((depth, surface, pos))
+		self.draw_queue.append(	(depth,
+								 lambda: draw_surface(	target=self.screen,
+														surface=surface,
+														pos=pos)))
+		#self.draw_queue.append((depth, surface, pos))
 	def start_animation(self, animation, pos, owner):
 		self.active_animations.append({ 'animation': deepcopy(animation),
 										'pos': pos,
 										'owner': owner})
 	def start_battle(self):
-		self.state = BattleState()
+		self.enter_state(BattleState())
+	def start_campaign(self):
+		self.enter_state(CampaignState())
+	def start_editor(self):
+		self.enter_state(EditorState())
 
 def main():
 	game = Game()

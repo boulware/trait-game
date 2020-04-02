@@ -9,6 +9,7 @@ class Surface:
 	def __init__(self, size):
 		self._pg_surface = pg.Surface(size.tuple)
 		self.filepath = None
+		self.anchor = Vec(0,0)
 	@classmethod
 	def from_pgsurface(cls, pg_surface):
 		new = Surface(size=Vec(0,0))
@@ -20,6 +21,8 @@ class Surface:
 		new = cls.from_pgsurface(file_surface)
 		new.filepath = filepath
 		return new
+	def set_anchor(self, anchor):
+		self.anchor = anchor
 	def set_colorkey(self, color):
 		self._pg_surface.set_colorkey(color)
 	def fill(self, color):
@@ -63,8 +66,28 @@ def draw_line(target, color, start, end, width=1):
 	pg.draw.line(target._pg_surface, color, (start.x, start.y), (end.x, end.y), width)
 
 def draw_rect(target, color, pos, size, width=0):
-	pg.draw.rect(target._pg_surface, color, pg.Rect(int(pos.x), int(pos.y), int(size.x), int(size.y)), width)
-	return Rect(pos, size)
+	if width >= 0:
+		pg.draw.rect(	target._pg_surface,
+						color,
+						pg.Rect(int(pos.x), int(pos.y),
+								int(size.x), int(size.y)),
+						width)
+		return Rect(pos, size)
+	else:
+		# Negative width still has the given rect be the bounds of the drawn rect.
+		# So the thickness of the line is drawn towards the center of the rect,
+		# instead of outwards (drawing outwards makes the drawing bounds effectively larger,
+		# larger than the given size)
+
+		# It's a little janky as-is. The given drawn size is slightly smaller than the given size,
+		# but it's roughly correct (the native pg.draw.rect doesn't work with negative widths at all)
+		rect = pg.Rect(	int(pos.x-width), int(pos.y-width),
+						int(size.x+width*2), int(size.y+width*2))		
+		pg.draw.rect(	target._pg_surface,
+						color,
+						rect,
+						abs(width))
+		return rect
 
 def draw_text(target, color, pos, text, font, x_center=True, y_center=True):
 	text_pg_surface = font.render(text, True, color)
@@ -110,8 +133,16 @@ def draw_x(target, color, rect, width=5):
 	draw_line(target=target, color=color, start=rect.top_left, end=rect.bottom_right, width=width)
 	draw_line(target=target, color=color, start=rect.top_right, end=rect.bottom_left, width=width)
 
+#def draw_arrow(target, color, start, end, head_size, width=1):
+	"""	Draw an arrow between [start] and [end] with an arrow head at end of size [head_size].
+	[width] indicates how wide the line is."""
+	#draw_line(target=target, color=color, start=start, end=end, width=width)
+	#pg.draw.polygon(target, color, )
+
 def draw_surface(target, surface, pos, x_align=AlignX.Left, y_align=AlignY.Up):
 	aligned_pos = Vec(pos.x, pos.y)
+
+	aligned_pos -= surface.anchor
 
 	if x_align == AlignX.Center:
 		aligned_pos.x -= surface.width/2

@@ -124,6 +124,11 @@ class Vec2i:
 	def float(self):
 		return Vec2f(self.x, self.y)
 
+def in_range(number, low, high):
+	if number >= low and number < high:
+		return True
+	else:
+		return False
 
 def last_index(container):
 	"""For lists and tuples, return the last valid index"""
@@ -131,6 +136,14 @@ def last_index(container):
 		return len(container)-1
 	else:
 		print('Tried to get last_index of invalid container type.')
+		raise TypeError()
+
+def is_positive_index(container, index):
+	if isinstance(container, (list,tuple)):
+		if in_range(index, 0, len(container)):
+			return True
+	else:
+		print('Tried is_positive_index for invalid container type.')
 		raise TypeError()
 
 def key_pressed(key, p_keys, keys):
@@ -182,9 +195,9 @@ class InputState:
 			# We're in repeat mode
 			self.repeat_tick += df
 	def down(self, key=None, button=None):
-		if key:
+		if key != None:
 			return self.keys[key]
-		elif button:
+		elif button != None:
 			return self.buttons[button]
 		else:
 			return False
@@ -222,6 +235,25 @@ class InputState:
 				else:
 					if self.keys[mod] == True:
 						return True
+
+	def released(self, key=None, button=None):
+		if key != None:
+			if self.p_keys == None:
+				# First frame is indeterminate because there's no data from previous frame,
+				# so just assume no keys have been released.
+				return False
+
+			if self.p_keys[key] == True and self.keys[key] == False:
+				return True
+			else:
+				return False
+		elif button != None:
+			if self.p_buttons == None:
+				# First frame is indeterminate because there's no data from previous frame,
+				# so just assume no buttons have been pressed.
+				return False
+			if self.p_buttons[button] == True and self.buttons[button] == False:
+				return True					
 
 
 def split_text(text, font, word_wrap_width):

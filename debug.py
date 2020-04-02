@@ -148,16 +148,16 @@ class DebugUI:
 		pg.display.flip()
 	def any_key_pressed(self, input_state):
 		key = input_state # Alias for shorter expressions
-		if key.pressed(pg.K_d, pg.K_LCTRL):
+		if key.pressed(key=pg.K_d, mod=pg.K_LCTRL):
 			self.active = not self.active
 
 		# Only allow the ctrl+d to enable or disable the debug interface if it's "deactivated"
 		if self.active is True:
 			self.test_treeview.any_key_pressed(input_state=input_state)
-			if key.pressed(pg.K_PLUS, pg.K_LCTRL):
+			if key.pressed(key=pg.K_PLUS, mod=pg.K_LCTRL):
 				global active_print
 				active_print = not active_print
-			elif key.pressed(pg.K_t, pg.K_LCTRL):
+			elif key.pressed(key=pg.K_t, mod=pg.K_LCTRL):
 				if self.bg_alpha != 255:
 					self.bg_alpha = 255
 				else:
@@ -407,7 +407,7 @@ class TreeView(UI.Element):
 		# 		if node == self.selected_node:
 		# 			searching = True
 
-		if key.pressed(pg.K_DOWN):
+		if key.pressed(key=pg.K_DOWN):
 			# Move 1 item down in the list
 			for i, depth_pair in enumerate(self.current_list):
 				node = depth_pair[0]
@@ -415,7 +415,7 @@ class TreeView(UI.Element):
 				if node == self.selected_node and i < len(self.current_list)-1:
 					self.selected_node = self.current_list[i+1][0]
 					break
-		elif key.pressed(pg.K_UP):
+		elif key.pressed(key=pg.K_UP):
 			# Move 1 item up in the list
 			for i, depth_pair in enumerate(self.current_list):
 				node = depth_pair[0]
@@ -423,20 +423,20 @@ class TreeView(UI.Element):
 				if node == self.selected_node and i > 0:
 					self.selected_node = self.current_list[i-1][0]
 					break
-		elif key.pressed(pg.K_RETURN):
+		elif key.pressed(key=pg.K_RETURN):
 			# Expand or unexpand currently selected node
 			if self.selected_node is not None:
 				self.selected_node.expanded = not self.selected_node.expanded
 				self.selected_node.load_children()
-		elif key.pressed(pg.K_f, pg.K_LCTRL) or key.pressed(pg.K_f, pg.K_RCTRL):
+		elif key.pressed(key=pg.K_f, mod=pg.K_LCTRL) or key.pressed(key=pg.K_f, mod=pg.K_RCTRL):
 			# Re-center root of the tree on the currently selected node, only showing it and its children
 			self.root = self.selected_node
-		elif key.pressed(pg.K_r, pg.K_LCTRL) or key.pressed(pg.K_r, pg.K_RCTRL):
+		elif key.pressed(key=pg.K_r, mod=pg.K_LCTRL) or key.pressed(key=pg.K_r, mod=pg.K_RCTRL):
 			# Reset root to the default root.
 			self.root = self.default_root
 			self.root.expanded = False
 			self.selected_node = self.root
-		elif key.pressed(pg.K_RIGHT):
+		elif key.pressed(key=pg.K_RIGHT):
 			# Increase currently selected value, if valid operation
 			value = self.selected_node.value
 			if type(value) is bool:
@@ -453,7 +453,7 @@ class TreeView(UI.Element):
 					self.selected_node.set_value(value + value*(0.01*multiplier))
 			else:
 				print("Tried to increment debug value which is not implemented.")
-		elif key.pressed(pg.K_LEFT):
+		elif key.pressed(key=pg.K_LEFT):
 			# Decrease currently selected value, if valid operation
 			value = self.selected_node.value
 			if type(value) is bool:
@@ -470,24 +470,24 @@ class TreeView(UI.Element):
 					self.selected_node.set_value(value - value*(0.01*multiplier))
 			else:
 				print("Tried to increment debug value which is not implemented.")
-		elif key.pressed(pg.K_DELETE):
+		elif key.pressed(key=pg.K_DELETE):
 			# Set currently selected node to None (be careful!)
 			self.selected_node.set_value(None)
-		elif key.pressed(pg.K_0):
+		elif key.pressed(key=pg.K_0):
 			# Set currently selected node to 0
 			value = self.selected_node.value
 			if type(value) is int:
 				self.selected_node.set_value(0)
 			if type(value) is float:
 				self.selected_node.set_value(0.0)
-		elif key.pressed(pg.K_BACKSPACE):
+		elif key.pressed(key=pg.K_BACKSPACE):
 			# Jump selection to parent of currently selected node
 			if self.selected_node.parent is not None:
 				if self.root == self.selected_node:
 					self.root = self.selected_node.parent
 				self.selected_node = self.selected_node.parent
 				self.selected_node.expanded = True
-		elif key.pressed(pg.K_p, pg.K_LCTRL) or key.pressed(pg.K_p, pg.K_RCTRL):
+		elif key.pressed(key=pg.K_p, mod=pg.K_LCTRL) or key.pressed(key=pg.K_p, mod=pg.K_RCTRL):
 			# Pin currently selected node to the top of the tree (it will be highlighted blue)
 			# It will always be visible as long as the tree is visible, until unpinned (same hotkey)
 			if self.selected_node not in self.pinned_nodes:

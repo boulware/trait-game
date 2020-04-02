@@ -36,6 +36,12 @@ class Rect:
 		self.pos = pos
 		self.size = size
 	@property
+	def width(self):
+		return self.size.x
+	@property
+	def height(self):
+		return self.size.y
+	@property
 	def top_left(self):
 		return self.pos
 	@property

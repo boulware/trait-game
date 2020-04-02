@@ -4,3 +4,6 @@
 *Implement multiples tweens in .dat loading
 *Fix crash when there's a move in animations.dat that doesn't match with the given unit name.
 	=> On top of that, some general error reporting when the animations are invalidly defined would be good too
+*Action preview while selecting a target for an ally's action incorrectly previews the damage on all alies, regardless of where the mouse is.
+*Convert queue_surface stuff that uses primitives like lines/rects into queue_drawline/queue_drawrect calls instead. They might be faster (they certainly wouldn't be slower... right?)
+*There's a confusion with mouse button indices. On the event queue, left click is index=1, but in pg.mouse.get_state() [or whatever it is], left click is index=0. This needs to be sorted out, especially with the util.KeyState (if I'm still going to continue to use that)

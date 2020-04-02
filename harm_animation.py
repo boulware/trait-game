@@ -13,6 +13,7 @@ class Tween:
 		self.jerk=jerk
 		self.duration = duration
 	def pos(self, t):
+
 		x = (1-pow(t,self.jerk))*self.start_pos.x+(pow(t,self.jerk))*self.end_pos.x
 		y = (1-pow(t,self.jerk))*self.start_pos.y+(pow(t,self.jerk))*self.end_pos.y
 		#if t > 0:
