@@ -17,6 +17,8 @@ from harm_math import Vec, Rect
 from harm_animation import Tween, Animation
 from harm_draw import Surface, draw_surface, darken_color, draw_line, draw_rect, draw_text, AlignX, AlignY, draw_x, draw_text_wrapped
 import constants as c
+from constants import EditableType, editable_type_strings
+import error
 
 typeable_chars = 	  [chr(i) for i in range(ord('a'),ord('z')+1)] \
 					+ [chr(i) for i in range(ord('A'),ord('Z')+1)] \
@@ -29,7 +31,7 @@ import pygame as pg
 screen_width, screen_height = 1400,800
 game = None
 
-# -- State class template -- 
+# -- State class template --
 
 # class State:
 # 	def __init__(self):
@@ -40,7 +42,7 @@ game = None
 # 		pass
 # 	def key_pressed(self, game, key, mod, translated):
 # 		pass
-# 	def mouse_button_pressed(self, game, button):
+# 	def mouse_button_pressed(self, game, button, mouse_pos):
 #  		pass
 #  	def enter(self):
 #  		pass
@@ -50,6 +52,8 @@ game = None
 
 pg.font.init()
 main_font_10 = pg.font.Font("font.ttf", 28)
+main_font_10_u = pg.font.Font("font.ttf", 28)
+main_font_10_u.set_underline(True)
 main_font_7 = pg.font.Font("font.ttf", 22)
 main_font_5 = pg.font.Font("font.ttf", 18)
 main_font_5_u = pg.font.Font("font.ttf", 18)
@@ -247,10 +251,10 @@ class Timer:
 	@property
 	# Returns time remaining in seconds, assuming 60FPS
 	def time_remaining(self):
-		return (self.duration - self.current_frame) * 1/60	
+		return (self.duration - self.current_frame) * 1/60
 
 def get_sprite_slot_pos(slot, team):
-	x,y = 0,0 
+	x,y = 0,0
 	if team == 0:
 		x = friendly_slot_positions[slot]
 		y = friendly_ui_paddings[2]
@@ -286,7 +290,7 @@ def get_sprite_slot_pos(slot, team):
 
 # 		other.actions = deepcopy(self.actions)
 # 		other.action_animations = deepcopy(self.action_animations)
-# 		other.action_buttons 
+# 		other.action_buttons
 # 	def add_action(self, action):
 # 		action.owner = self
 # 		self.actions.append(deepcopy(action))
@@ -309,7 +313,7 @@ def get_sprite_slot_pos(slot, team):
 # 		if self.cur_traits[T.Vigor] > 0:
 # 			return True
 # 		else:
-# 			return False		
+# 			return False
 # 	@property
 # 	def current_animation(self):
 # 		if self.current_action_index is None:
@@ -433,7 +437,7 @@ def deal_damage(kwargs):
 											owner=source)
 			if target.cur_traits[trait] < 0:
 				target.cur_traits[trait] = 0
-				
+
 
 class TargetSet(Enum):
 	Nothing = 0
@@ -502,7 +506,7 @@ class ActionSchematic:
 				if match:
 					value = int(match[1])
 					trait = next(key for key, value in trait_strings.items() if value == match[2])
-					damages[trait] = value				
+					damages[trait] = value
 				continue
 			line_match = re.search('\t(requires) (.*)', line.rstrip())
 			if line_match:
@@ -511,7 +515,7 @@ class ActionSchematic:
 				if match:
 					value = int(match[1])
 					trait = next(key for key, value in trait_strings.items() if value == match[2])
-					required[trait] = value				
+					required[trait] = value
 				continue
 		return cls(	name=name,
 					description=description,
@@ -547,7 +551,7 @@ class Action:
 
 		self.sub_actions = []
 		self.sub_actions.append(lambda source, targets: deal_damage(kwargs={'source': source,
-																			'targets': targets, 
+																			'targets': targets,
 																			'damages': self.damages}))
 	def execute(self, kwargs={}):
 		if self.usable is True:
@@ -609,12 +613,14 @@ class ActionSchematicDatabase:
 			if in_action:
 				action = ActionSchematic.from_string(action_string)
 				self.schematics.append(action)
+	def get_list_of_schematic_names(self):
+		return [e.name for e in self.schematics]
 	def get_schematic_by_name(self, name):
 		return next(s for s in self.schematics if s.name == name)
 	def generate_action(self, name, owner):
 		schematic = next(s for s in self.schematics if s.name == name)
 		return schematic.generate_action(owner=owner)
-		
+
 class UnitSchematic:
 	def __init__(self, name, description, traits, idle_animation, hover_idle_animation):
 		self.name = name
@@ -657,7 +663,7 @@ class UnitSchematic:
 													sprite_lengths=[60],
 													anchor_points=[Vec(0,idle_surface.height)])
 					hover_idle_animation = idle_animation
-				continue			
+				continue
 			line_match = re.search('\thas (.*)', line.rstrip())
 			if line_match:
 				# ex: "(has) 50 Vigor"
@@ -668,7 +674,7 @@ class UnitSchematic:
 					trait = next(key for key, value in trait_strings.items() if value == match[2])
 					traits[trait] = value
 					continue
-				match = re.search('action (.*)', line_match[1])					
+				match = re.search('action (.*)', line_match[1])
 				if match:
 					action_name = match[1]
 					schematic = game.action_db.get_schematic_by_name(action_name)
@@ -685,7 +691,7 @@ class UnitSchematic:
 		# Just fill the action_animations list with our idle animations.
 		# They'll be replaced later when the animations are read from
 		# data files
-		new.action_animations = [idle_animation]*len(action_schematics) 
+		new.action_animations = [idle_animation]*len(action_schematics)
 
 		return new
 	def generate_unit(self, team, slot):
@@ -707,6 +713,8 @@ class UnitSchematic:
 		return s
 class Unit:
 	def __init__(self, team, slot, schematic):
+		self.name = schematic.name
+		self.description = schematic.description
 		self.team = team
 		self.slot = slot
 		self.max_traits = copy(schematic.traits)
@@ -717,11 +725,11 @@ class Unit:
 		self.action_animations = deepcopy(schematic.action_animations)#deepcopy(schematic.action_animations) # Concurrent array to self.actions
 
 		for action in self.actions:
-			action.owner = self	
+			action.owner = self
 		self.action_buttons = [ActionButton(pos=Vec(x=get_slot_x_pos(team=self.team, slot=self.slot),
 													y=get_team_ui_padding(team=self.team, index=3) + i*action_button_size.y),
 												linked_action=action) for i, action in enumerate(self.actions)]
-		
+
 		self.action_points = 1
 		self.current_action_index = None
 		self.current_action_targets = None
@@ -734,7 +742,7 @@ class Unit:
 				return self.action_animations[self.current_action_index]
 			else:
 				return self.idle_animation
-	@property 
+	@property
 	def action_finished(self):
 		if self.current_action_index == None or self.alive == False:
 			return True
@@ -764,7 +772,7 @@ class Unit:
 
 			self.current_action_targets = targets
 			self.current_action.execute(kwargs={'source': self,
-												'targets': targets})				
+												'targets': targets})
 			self.action_points -= 1
 	def start_random_action(self, allies, enemies):
 		if self.alive:
@@ -782,7 +790,7 @@ class Unit:
 			self.current_action_index = random.choice(possible_actions_indices)
 			self.current_action_targets = []
 
-			action = self.actions[self.current_action_index]	
+			action = self.actions[self.current_action_index]
 			if action.target_set == TargetSet.Self:
 				self.current_action_targets = [self]
 			elif action.target_set == TargetSet.SingleAlly:
@@ -794,7 +802,7 @@ class Unit:
 				if len(non_self_non_dead_allies) > 0:
 					self.current_action_targets = [random.choice(non_self_non_dead_allies)]
 			elif action.target_set == TargetSet.AllAllies:
-				non_dead_allies = [e for e in allies if e.alive == True]				
+				non_dead_allies = [e for e in allies if e.alive == True]
 				if len(non_dead_allies) > 0:
 					self.current_action_targets = non_dead_allies
 			elif action.target_set == TargetSet.SingleEnemy:
@@ -882,7 +890,7 @@ class Unit:
 		):
 			return True
 		else:
-			return False		
+			return False
 class UnitSchematicDatabase:
 	def __init__(self, unit_data, animation_data):
 		self.schematics = []
@@ -923,7 +931,7 @@ class UnitSchematicDatabase:
 		with open(animation_data) as f:
 			in_schematic = False
 			unit_index = None
-			action_index = None			
+			action_index = None
 			string = ""
 			while line:
 				match = re.search('^([a-zA-Z]*)\'s (.*)', line.rstrip())
@@ -955,7 +963,7 @@ class UnitSchematicDatabase:
 	def get_list_of_schematic_names(self):
 		return [s.name for s in self.schematics]
 	def get_schematic_by_name(self, name):
-		return next(s for s in self.schematics if s.name == name)				
+		return next(s for s in self.schematics if s.name == name)
 	def generate_unit(self, name, team, slot):
 		schematic = next(s for s in self.schematics if s.name == name)
 		return schematic.generate_unit(team=team, slot=slot)
@@ -1020,7 +1028,7 @@ class ActionButton:
 		# Hovered surface
 		hover_back_color = c.ltgrey
 		hover_border_color = c.red
-		hover_text_color = c.white	
+		hover_text_color = c.white
 
 		self.hover_surface = Surface(self.size)
 
@@ -1083,7 +1091,7 @@ class ActionButton:
 			if self.owner.team == 0:
 				self.draw_info_box(mouse_pos=mouse_pos)
 		else:
-			game.queue_surface(depth=20, surface=self.surface, pos=self.pos)			
+			game.queue_surface(depth=20, surface=self.surface, pos=self.pos)
 
 		# Return extent of drawn button
 		return self.rect
@@ -1115,7 +1123,7 @@ class ActionButton:
 								linked_action=self.linked_action)
 
 
-	
+
 
 class Turn:
 	def __init__(self, initial_active=True):
@@ -1207,11 +1215,7 @@ class MainMenuState:
 		self.buttons.append(Button(	pos=Vec(100,100),
 									size=Vec(150,70),
 									text="Start Campaign",
-									function=lambda: game.start_campaign()))		
-		self.buttons.append(Button(	pos=Vec(100,170),
-									size=Vec(150,70),
-									text="Test Battle",
-									function=lambda: game.start_battle()))
+									function=lambda: game.start_campaign()))
 		self.buttons.append(Button(	pos=Vec(100,240),
 									size=Vec(150,70),
 									text="Editor",
@@ -1219,15 +1223,13 @@ class MainMenuState:
 		self.buttons.append(Button(	pos=Vec(100,310),
 									size=Vec(150,70),
 									text="Exit",
-									function=lambda: sys.exit()))		
+									function=lambda: sys.exit()))
 
 	def enter(self):
 		pass
 	def exit(self):
 		sys.exit()
 	def draw(self, game):
-		for button in self.buttons:
-			button.draw(game=game)
 
 		game.queue_surface(surface=pointer_cursor_surface, depth=-100, pos=game.mouse_pos)
 
@@ -1242,7 +1244,7 @@ class MainMenuState:
 
 # class Button:
 # 	def __init__(self, rect, font, text):
-# 		self.rect = rect		
+# 		self.rect = rect
 # 		self.font = font
 # 		self.text = text
 
@@ -1252,7 +1254,7 @@ class MainMenuState:
 # 							size=self.rect.size,
 # 							color=c.ltgrey,
 # 							width=0,
-# 							depth=-2)		
+# 							depth=-2)
 # 		# Button border
 # 		game.queue_drawrect(pos=self.rect.top_left,
 # 							size=self.rect.size,
@@ -1301,7 +1303,7 @@ class Button:
 	@property
 	def rect(self):
 		return Rect(self.pos, self.size)
-	
+
 	def update(self, game):
 		if self.intersect(pos=game.mouse_pos):
 			self.hovered = True
@@ -1310,7 +1312,7 @@ class Button:
 
 		if game.input.pressed(button=0) and self.hovered:
 			self.function()
-	def draw(self, game):
+
 		if self.hovered == True:
 			game.queue_surface(	surface=self.hover_surface,
 								pos=self.pos,
@@ -1318,7 +1320,7 @@ class Button:
 		else:
 			game.queue_surface(	surface=self.surface,
 								pos=self.pos,
-								depth=0)			
+								depth=0)
 	def intersect(self, pos):
 		if (	pos.x > self.rect.left
 			and pos.x < self.rect.right
@@ -1328,10 +1330,9 @@ class Button:
 			return True
 
 		return False
-
 class TextBox:
 	def __init__(self, rect, font, initial_text=''):
-		self.rect = rect		
+		self.rect = rect
 		self.font = font
 		self.text = initial_text
 
@@ -1350,6 +1351,17 @@ class TextBox:
 		self.blink_visible = True
 		self.blink_timer = 0
 		self.blink_period = 30
+	def reset_focus_state(self):
+		self.focused = False
+		self.cursor_pos = 0
+		self.highlight = [0,0]
+	@property
+	def pos(self):
+		return self.rect.pos
+	@property
+	def size(self):
+		return self.rect.size
+
 	@property
 	def text(self):
 		return self._text
@@ -1358,7 +1370,7 @@ class TextBox:
 		self._text = text
 		self.refresh_char_rects()
 		self.blink_visible = True
-		self.blink_timer = 0		
+		self.blink_timer = 0
 
 	@property
 	def cursor_pos(self):
@@ -1368,8 +1380,8 @@ class TextBox:
 		self._cursor_pos = cursor_pos
 		self.blink_visible = True
 		self.blink_timer = 0
-	
-	
+
+
 	def refresh_char_rects(self, start_index=0):
 		'''Calculate the positions of each character in self.text,
 		to use to place the edit cursor.
@@ -1400,7 +1412,7 @@ class TextBox:
 			# Empty string should return left-most pos in textbox (index 0)
 			return char_index
 
-		# TODO: A binary search would probably be faster here, if it's necessary		
+		# TODO: A binary search would probably be faster here, if it's necessary
 		for i, r in enumerate(self.char_rects):
 			if rel_x < r.center.x:
 				char_index = i
@@ -1426,7 +1438,7 @@ class TextBox:
 			self.highlight_start = self.cursor_pos
 		else:
 			self.cursor_pos = 0
-	
+
 
 	def unfocus(self):
 		self.focused = False
@@ -1436,7 +1448,7 @@ class TextBox:
 		if self.highlight[0] == self.highlight[1]:
 			if self.cursor_pos == 0:
 				# Backspace does nothing if cursor is completely to the left.
-				return			
+				return
 			self.text = self.text[0:self.cursor_pos-1] + self.text[self.cursor_pos:]
 			self.cursor_pos = max(0, self.cursor_pos-1)
 		else:
@@ -1460,13 +1472,13 @@ class TextBox:
 		start_pos = self.cursor_pos
 
 		if highlight == True:
-			self.cursor_pos = max(self.cursor_pos-1, 0)			
+			self.cursor_pos = max(self.cursor_pos-1, 0)
 			if start_pos == self.highlight[0]:
 				self.highlight[0] = self.cursor_pos
 			elif start_pos == self.highlight[1]:
 				self.highlight[1] = self.cursor_pos
 			else:
-				print("self.cursor_pos is not equal to either highlight[0] nor highlight[1]. Something went wrong.")
+				error.log("self.cursor_pos is not equal to either highlight[0] nor highlight[1]. Something went wrong.")
 		elif highlight == False:
 			if self.highlight[0] != self.highlight[1]:
 				self.cursor_pos = self.highlight[0]
@@ -1484,34 +1496,41 @@ class TextBox:
 		start_pos = self.cursor_pos
 
 		if highlight == True:
-			self.cursor_pos = min(self.cursor_pos+1, len(self.char_rects)-1)				
+			self.cursor_pos = min(self.cursor_pos+1, len(self.char_rects)-1)
 			if start_pos == self.highlight[0]:
 				self.highlight[0] = self.cursor_pos
 			elif start_pos == self.highlight[1]:
 				self.highlight[1] = self.cursor_pos
 			else:
-				print("self.cursor_pos is not equal to either highlight[0] nor highlight[1]. Something went wrong.")
+				error.log("self.cursor_pos is not equal to either highlight[0] nor highlight[1]. Something went wrong.")
 		elif highlight == False:
 			if self.highlight[0] != self.highlight[1]:
 				self.cursor_pos = self.highlight[1]
 			else:
-				self.cursor_pos = min(self.cursor_pos+1, len(self.char_rects)-1)	
+				self.cursor_pos = min(self.cursor_pos+1, len(self.char_rects)-1)
 
 			self.highlight = [self.cursor_pos, self.cursor_pos]
 
 		if self.highlight[0] > self.highlight[1]:
 			buf = self.highlight[0]
 			self.highlight[0] = self.highlight[1]
-			self.highlight[1] = buf			
+			self.highlight[1] = buf
 
 	def update(self, game):
 		self.blink_timer += 1
 		if self.blink_timer >= self.blink_period:
-			self.blink_timer = 0			
+			self.blink_timer = 0
 			self.blink_visible = not self.blink_visible
 
-	def draw(self, game, debug=False):
-		w, h = main_font_10.size(self.text)		
+		new_focus_state = None
+		if game.input.pressed(button=0):
+			if self.rect.intersect(point=game.mouse_pos):
+				self.focus(mouse_pos=game.mouse_pos)
+				new_focus_state = True
+			else:
+				if self.focused == True:
+					self.unfocus()
+					new_focus_state = False
 
 		# Textbox outline
 		game.queue_drawrect(pos=self.rect.top_left,
@@ -1538,6 +1557,15 @@ class TextBox:
 							depth=5)
 
 		if self.focused:
+			if game.input.down(button=0) and self.highlight_start != None:
+				i = self.pos_to_char_index(pos=game.mouse_pos)
+				self.cursor_pos = i
+				if i >= self.highlight_start:
+					self.highlight[0] = self.highlight_start
+					self.highlight[1] = i
+				else:
+					self.highlight[0] = i
+					self.highlight[1] = self.highlight_start
 			if self.blink_visible:
 				x_pos = self.char_rects[self.cursor_pos].left
 				game.queue_drawline(start=Vec(self.rect.left+x_pos, self.rect.top),
@@ -1546,13 +1574,8 @@ class TextBox:
 									width=1,
 									depth=-50)
 
-		if debug:
-			for x_pos in self.char_rects[self.cursor_pos].left:
-				game.queue_drawline(start=Vec(self.rect.left+x_pos, self.rect.top),
-									end=Vec(self.rect.left+x_pos, self.rect.bottom),
-									color=c.red,
-									width=1,
-									depth=-50)
+		return new_focus_state
+
 
 	def key_pressed(self, game, key, mod, translated):
 		if self.focused:
@@ -1571,17 +1594,17 @@ class TextBox:
 				self.highlight = [self.cursor_pos, self.cursor_pos]
 			if key == pg.K_HOME:
 				self.cursor_pos = 0
-				self.highlight = [self.cursor_pos, self.cursor_pos]				
+				self.highlight = [self.cursor_pos, self.cursor_pos]
 
-			if game.input.down(button=0) and self.highlight_start != None:
-				i = self.pos_to_char_index(pos=game.mouse_pos)
-				self.cursor_pos = i
-				if i >= self.highlight_start:
-					self.highlight[0] = self.highlight_start
-					self.highlight[1] = i
-				else:
-					self.highlight[0] = i
-					self.highlight[1] = self.highlight_start
+			# if game.input.down(button=0) and self.highlight_start != None:
+			# 	i = self.pos_to_char_index(pos=game.mouse_pos)
+			# 	self.cursor_pos = i
+			# 	if i >= self.highlight_start:
+			# 		self.highlight[0] = self.highlight_start
+			# 		self.highlight[1] = i
+			# 	else:
+			# 		self.highlight[0] = i
+			# 		self.highlight[1] = self.highlight_start
 
 		if translated in typeable_chars:
 			if self.highlight[0] == self.highlight[1]:
@@ -1597,6 +1620,156 @@ class TextBox:
 
 			self.highlight = [self.cursor_pos, self.cursor_pos]
 
+class Dropdown:
+	def __init__(self, pos, size, entries=[], default=None):
+		self.rect = Rect(pos=pos, size=size)
+		self.entries = entries
+		self.selected_index = default
+		self.open = False
+	@property
+	def pos(self):
+		return self.rect.pos
+	@property
+	def size(self):
+		return self.rect.size
+	@property
+	def selected_entry(self):
+		if self.selected_index != None and len(self.entries) != 0:
+			return self.entries[self.selected_index]
+		else:
+			return None
+
+	def select_entry_by_name(self, name):
+		self.selected_index = self.entries.index(name)
+	def update(self, game):
+		# Mostly drawing
+		if self.selected_index != None and len(self.entries) != 0:
+			game.queue_drawtext(pos=self.rect.center,
+								text=self.entries[self.selected_index],
+								font=main_font_7,
+								color=c.white,
+								depth=9)
+		if self.open == False:
+			color = c.white
+		else:
+			color = c.green
+		game.queue_drawrect(pos=self.pos,
+							size=self.size,
+							color=color,
+							width=1,
+							depth=10)
+
+		if self.open == True:
+			list_start = self.rect.bottom_left
+			for i, text in enumerate(self.entries):
+				entry_start = list_start + Vec(0, i*self.size.y)
+
+				if Rect(entry_start, self.size).intersect(point=game.mouse_pos):
+					if game.input.pressed(button=0):
+						self.selected_index = i
+						self.open = False
+					outline_color = c.green
+					text_color = c.white
+				else:
+					outline_color = c.grey
+					text_color = c.ltgrey
+
+				game.queue_drawrect(pos=entry_start,
+									size=self.size,
+									color=c.dkgrey,
+									width=0,
+									depth=5)
+				game.queue_drawrect(pos=entry_start,
+									size=self.size,
+									color=outline_color,
+									width=1,
+									depth=4)
+				game.queue_drawtext(pos=entry_start+self.size/2,
+									text=text,
+									font=main_font_7,
+									color=text_color,
+									depth=3)
+
+		if self.rect.intersect(game.mouse_pos) or self.open == True:
+			game.queue_drawrect(pos=self.pos,
+								size=self.size,
+								color=c.grey,
+								depth=11)
+
+		# Mostly logic
+		if game.input.pressed(button=0):
+			if self.rect.intersect(point=game.mouse_pos):
+				self.open = not self.open
+			else:
+				self.open = False
+
+
+class ListView:
+	def __init__(	self, pos, size, entry_height, font,
+					entries=[], default=None):
+		self.rect = Rect(pos=pos, size=size)
+		self.entry_height = entry_height
+		self.font = font
+		self.entries = entries
+
+		self.selected_index = default
+	@property
+	def selected_entry(self):
+		if self.selected_index == None:
+			return ''
+		return self.entries[self.selected_index]
+	@property
+	def pos(self):
+		return self.rect.pos
+	@property
+	def size(self):
+		return self.rect.size
+
+	def update(self, game):
+		state_changed = False
+
+		game.queue_drawrect(pos=self.pos,
+							size=self.size,
+							color=c.white,
+							width=1,
+							depth=0)
+
+		# TODO: For performance, we should render and cache text surfaces
+		for i, e in enumerate(self.entries):
+			rect = Rect(pos=self.pos + Vec(0, i*self.entry_height+1),
+						size=Vec(self.size.x, self.entry_height-1))
+			if rect.intersect(game.mouse_pos):
+				# If hovered, draw highlighted background
+				game.queue_drawrect(pos=rect.pos,
+									size=rect.size,
+									color=c.grey,
+									depth=10)
+
+				if game.input.pressed(button=0):
+					self.selected_index = i
+					state_changed = True
+
+			if self.selected_index == i:
+				text_color = c.green
+			else:
+				text_color = c.white
+
+			game.queue_drawtext(text=e,
+								font=self.font,
+								color=text_color,
+								x_center=True,
+								y_center=True,
+								pos=self.pos + Vec(0, i*self.entry_height) + 0.5*Vec(self.size.x, self.entry_height),
+								depth=2)
+			game.queue_drawline(start=self.pos + Vec(0, (i+1)*self.entry_height),
+								end=self.pos + Vec(self.size.x, (i+1)*self.entry_height),
+								color=c.ltgrey,
+								depth=1)
+
+		return state_changed
+
+	def draw(self, game):
+		pass
 
 class EditorState:
 	def __init__(self):
@@ -1604,144 +1777,229 @@ class EditorState:
 		self.entry_height = 50
 		self.left_pane_width = 400
 
-		self.selected_entry = None
-		self.focused_index = None
-		self.ui_elements = [None] * len(c.unit_ui_indices)
-		# Name textbox
-		for i, property_string in enumerate(c.unit_ui_indices):
-			self.ui_elements[i] = TextBox(	rect=Rect(	pos=Vec(self.left_pane_width + 20, 50+i*50),
-														size=Vec(150, 50)),
-											font=main_font_10,
-											initial_text="<{}>".format(property_string))
+		# UI elements that display and allow editing of object properties
+		self.property_ui_elements = [None] * len(c.unit_ui_indices)
 
-		# self.ui_elements[unit_name_ui_index] = 	TextBox(rect=Rect(	pos=Vec(self.left_pane_width + 20, 50),
-		# 															size=Vec(150, 50)),
-		# 												font=main_font_10,
-		# 												initial_text="<NAME>")
+		self.focused_index = None # Index of UI element currently focused
 
-		# # Description textbox
-		# self.ui_elements[unit_description_ui_index] =	TextBox(rect=Rect(	pos=Vec(self.left_pane_width + 20, 100),
-		# 																	size=Vec(150, 50)),
-		# 														font=main_font_5,
-		# 														initial_text="<DESCRIPTION>")
+		# ListView of editable types (e.g., Unit, Action, Battle)
+		self.editable_type_listview = ListView(	pos=Vec(20,0),
+												size=Vec(100, 150),
+												entry_height=50,
+												font=main_font_7,
+												entries=editable_type_strings,
+												default=0)
 
-		# # Trait value textboxes
-		# self.ui_elements[] =	TextBox(rect=Rect(	pos=Vec(self.left_pane_width + 20, 150),
-		# 											size=Vec(150, 50)),
-		# 								font=main_font_5,
-		# 								initial_text="<VIGOR>")
-		# self.ui_elements[] =	TextBox(rect=Rect(	pos=Vec(self.left_pane_width + 20, 200),
-		# 											size=Vec(150, 50)),
-		# 								font=main_font_5,
-		# 								initial_text="<ARMOR>")
-		# self.ui_elements[] =	TextBox(rect=Rect(	pos=Vec(self.left_pane_width + 20, 250),
-		# 											size=Vec(150, 50)),
-		# 								font=main_font_5,
-		# 								initial_text="<FOCUS>")	
+		# ListView of editable objects of the selected editable type
+		# e.g., Warrior, Wolf ... Rest, Intimidate
+		self.entry_listview = ListView(	pos=Vec(0,200),
+										size=Vec(200, 400),
+										entry_height=50,
+										font=main_font_5,
+										entries=[])
+
+		# Individual properties UI layout for each editable type
+		self.property_ui_elements = {
+			EditableType.Unit: [],
+			EditableType.Action: [],
+			EditableType.Battle: []
+		}
+		property_ui_origin = Vec(500,50)
+		property_textbox_width = 300
+		for editable_type, ui_elements in self.property_ui_elements.items():
+			for property_string, i in c.ui_indices[editable_type].items():
+				ui_elements.append(TextBox(	rect=Rect(	pos=property_ui_origin+Vec(0, i*50),
+														size=Vec(property_textbox_width, 50)),
+											font=main_font_5,
+											initial_text="<{}>".format(property_string)))
+
+
+		# Set up surfaces for text labels of property UI elements
+		self.property_label_text_surfaces = {
+			EditableType.Unit: 	 [None] * len(c.unit_ui_indices),
+			EditableType.Action: [None] * len(c.action_ui_indices),
+			EditableType.Battle: [None] * len(c.battle_ui_indices)
+		}
+		for editable_type, text_surfaces in self.property_label_text_surfaces.items():
+			for property_string, i in c.ui_indices[editable_type].items():
+				text_surfaces[i] = Surface.from_pgsurface(main_font_7.render(property_string, True, c.grey))
+
+		self.save_button = Button(	pos=Vec(screen_width-120, screen_height-70),
+									size=Vec(100,50),
+									text="Save",
+									function=self.save)
+
+		self.dropdowns = {
+			EditableType.Unit: 	 [None] * 4,
+			EditableType.Action: [None] * 0,
+			EditableType.Battle: [None] * 0
+		}
+
+		global game
+		for editable_type, dropdown_group in self.dropdowns.items():
+			for i, pos in enumerate(c.ui_dropdowns[editable_type]):
+				dropdown_group[i] = Dropdown(	pos=pos,
+												size=Vec(200,40),
+												entries=[''] + game.action_db.get_list_of_schematic_names(),
+												default=0)
+
+
+
+		self._refresh_editable_listviews()
+
 	def enter(self):
 		pass
 	def exit(self):
-		pass								
-	def update(self, game):
-		# Left Pane
+		pass
+	def save(self):
+		name = self.entry_listview.selected_entry
 
-		# Index of entry in the left pane which is currently hovered.
-		entry_hover_index = math.floor(float(game.mouse_pos.y - self.entry_list_start.y) / float(self.entry_height))
+		global game
+		if self.active_editable_type == EditableType.Unit:
+			schematic = game.unit_db.get_schematic_by_name(name)
 
-		x, y = self.entry_list_start
-		unit_names = game.unit_db.get_list_of_schematic_names()
-		# Draw entries in left pane
-		for i, name in enumerate(unit_names):
-			game.queue_drawline(start=Vec(0,y),
-								end=Vec(self.left_pane_width,y),
-								color=c.grey,
-								depth=-1)
-			game.queue_drawtext(color=c.white,
-								pos=Vec(x,y),
-								text=name,
-								font=main_font_10,
-								x_center=False,
-								y_center=False,
-								depth=10)
-			y += 50
+			schematic.name = self.active_property_ui_group[c.unit_ui_indices['name']].text
+			schematic.description = self.active_property_ui_group[c.unit_ui_indices['description']].text
+			schematic.traits[T.Vigor] = int(self.active_property_ui_group[c.unit_ui_indices['vigor']].text)
+			schematic.traits[T.Armor] = int(self.active_property_ui_group[c.unit_ui_indices['armor']].text)
+			schematic.traits[T.Focus] = int(self.active_property_ui_group[c.unit_ui_indices['focus']].text)
 
-		if game.input.pressed(button=0):
-			if self.focused_index != None:
-				self.ui_elements[self.focused_index].unfocus()
-				self.focused_index = None
-
-		if len(self.ui_elements) > 0:
-			if game.input.pressed(key=pg.K_TAB):
-				if self.focused_index == None:
-					self.focused_index = 0
-				else:
-					self.ui_elements[self.focused_index].unfocus()
-					
-					self.focused_index += 1
-					if self.focused_index > last_index(self.ui_elements):
-						self.focused_index = 0
-
-				self.ui_elements[self.focused_index].focus()
-				self.ui_elements[self.focused_index].highlight_all()
-
-
-		if in_range(entry_hover_index, 0, len(unit_names)) and game.mouse_pos.x <= self.left_pane_width:
-			game.queue_drawrect(color=c.ltgrey,
-								pos=Vec(0,self.entry_list_start.y+entry_hover_index*self.entry_height),
-								size=Vec(self.left_pane_width, self.entry_height),
-								depth=50)
-
-			if game.input.pressed(button=0):
-				self.selected_entry = game.unit_db.get_schematic_by_name(name=unit_names[entry_hover_index])
-				self.ui_elements[c.unit_ui_indices.index('name')].text = self.selected_entry.name
-				self.ui_elements[c.unit_ui_indices.index('description')].text = self.selected_entry.description
-				self.ui_elements[c.unit_ui_indices.index('vigor')].text = str(self.selected_entry.traits[T.Vigor])
-				self.ui_elements[c.unit_ui_indices.index('armor')].text = str(self.selected_entry.traits[T.Armor])
-				self.ui_elements[c.unit_ui_indices.index('focus')].text = str(self.selected_entry.traits[T.Focus])
-
-
-
-
-		# Right pane
-
-		textbox_hovered = False
-		if self.selected_entry != None:
-			for i, t in enumerate(self.ui_elements):
-				t.draw(game=game, debug=False)
-
-				if t.rect.intersect(point=game.mouse_pos):
-					textbox_hovered = True					
-					if game.input.pressed(button=0):
-						# Left mouse pressed while hovering a textbox
-						if self.focused_index != None:
-							self.ui_elements[self.focused_index].unfocus()
-						t.focus(mouse_pos=game.mouse_pos)
-						self.focused_index = i
-
-		if self.focused_index != None:
-			# Stuff to check if there's a currently focused UI element
+			for i, dropdown in enumerate(self.dropdowns[EditableType.Unit]):
+				#print(game.action_db.get_schematic_by_name(name=dropdown.selected_entry).name)
+				if dropdown.selected_entry != '':
+					schematic.action_schematics[i] = game.action_db.get_schematic_by_name(name=dropdown.selected_entry)
+		elif self.active_editable_type == EditableType.Action:
+			pass
+		elif self.active_editable_type == EditableType.Battle:
 			pass
 
-
-		if textbox_hovered:
-			game.queue_surface(surface=edit_cursor_surface, depth=-100, pos=game.mouse_pos)
+	def _refresh_editable_listviews(self):
+		selected_index = self.editable_type_listview.selected_index
+		if selected_index == 0:
+			# Unit
+			self.entry_listview.entries = game.unit_db.get_list_of_schematic_names()
+		if selected_index == 1:
+			# Action
+			self.entry_listview.entries = game.action_db.get_list_of_schematic_names()
+		if selected_index == 2:
+			# Battle
+			self.entry_listview.entries = [str(i) for i,_ in enumerate(game.battle_db.battles)]
+	def _refresh_property_ui_elements(self):
+		pass
+	@property
+	def active_editable_type(self):
+		return EditableType(self.editable_type_listview.selected_index)
+	@property
+	def active_property_ui_group(self):
+		if self.editable_type_listview.selected_index != None:
+			return self.property_ui_elements[self.active_editable_type]
 		else:
-			game.queue_surface(surface=pointer_cursor_surface, depth=-100, pos=game.mouse_pos)
+			return []
 
-		for t in self.ui_elements:
-			t.update(game=game)
+	def update(self, game):
+		for e in self.dropdowns[self.active_editable_type]:
+			if e != None:
+				e.update(game=game)
 
+		if self.editable_type_listview.update(game=game):
+			# Editable TYPE was chosen [e.g., unit/action/battle]
+			self.entry_listview.selected_index = None
+			self._refresh_editable_listviews()
+			for e in self.active_property_ui_group:
+				e.reset_focus_state()
+				e.text = ''
+		if self.entry_listview.update(game=game):
+			# A new unit was chosen [e.g., Warrior/Rogue/Wolf]
+			if self.active_editable_type == EditableType.Unit:
+				selected = game.unit_db.get_schematic_by_name(self.entry_listview.selected_entry)
+				self.active_property_ui_group[c.unit_ui_indices['name']].text = selected.name
+				self.active_property_ui_group[c.unit_ui_indices['description']].text = selected.description
+				self.active_property_ui_group[c.unit_ui_indices['vigor']].text = str(selected.traits[T.Vigor])
+				self.active_property_ui_group[c.unit_ui_indices['armor']].text = str(selected.traits[T.Armor])
+				self.active_property_ui_group[c.unit_ui_indices['focus']].text = str(selected.traits[T.Focus])
+
+				for d in self.dropdowns[self.active_editable_type]:
+					d.selected_index = None
+
+				for i, s in enumerate(selected.action_schematics):
+					dropdown = self.dropdowns[self.active_editable_type][i]
+					dropdown.select_entry_by_name(name=s.name)
+			if self.active_editable_type == EditableType.Action:
+				selected = game.action_db.get_schematic_by_name(self.entry_listview.selected_entry)
+				self.active_property_ui_group[c.action_ui_indices['name']].text = selected.name
+				self.active_property_ui_group[c.action_ui_indices['description']].text = selected.description
+				self.active_property_ui_group[c.action_ui_indices['target set']].text = target_set_strings[selected.target_set]
+				self.active_property_ui_group[c.action_ui_indices['vigor requirement']].text = str(selected.required[T.Vigor])
+				self.active_property_ui_group[c.action_ui_indices['armor requirement']].text = str(selected.required[T.Armor])
+				self.active_property_ui_group[c.action_ui_indices['focus requirement']].text = str(selected.required[T.Focus])
+				self.active_property_ui_group[c.action_ui_indices['vigor damage']].text = str(selected.damages[T.Vigor])
+				self.active_property_ui_group[c.action_ui_indices['armor damage']].text = str(selected.damages[T.Armor])
+				self.active_property_ui_group[c.action_ui_indices['focus damage']].text = str(selected.damages[T.Focus])
+			if self.active_editable_type == EditableType.Battle:
+				pass
+
+			for e in self.active_property_ui_group:
+				e.reset_focus_state()
+
+			self.focused_index = None
+
+		if self.editable_type_listview.selected_index != None:
+			for i, e in enumerate(self.active_property_ui_group):
+				new_focus_state = e.update(game=game)
+				if new_focus_state == True:
+					if self.focused_index != None and self.focused_index != i:
+						self.active_property_ui_group[self.focused_index].unfocus()
+
+					self.focused_index = i
+				elif new_focus_state == False:
+					self.focused_index = None
+
+		for i, s in enumerate(self.property_label_text_surfaces[self.active_editable_type]):
+			game.queue_surface(	surface=s,
+								pos=self.active_property_ui_group[i].rect.center_left - Vec(20,0),
+								x_align=AlignX.Right,
+								y_align=AlignY.Center,
+								depth=10)
+
+		self.save_button.update(game=game)
+
+		game.queue_drawline(start=Vec(300,0),
+							end=Vec(300,screen_height),
+							color=c.dkgrey,
+							width=1,
+							depth=50)
+
+		game.queue_surface(surface=pointer_cursor_surface, depth=-100, pos=game.mouse_pos)
 	def draw(self, game):
-		# Separator line between left and right pane
-		game.queue_drawline(	start=Vec(self.left_pane_width, 0),
-								end=Vec(self.left_pane_width, screen_height),
-								color=c.green,
-								depth=-1)
+		pass
 	def mouse_button_pressed(self, game, button, mouse_pos):
 		pass
 	def key_pressed(self, game, key, mod, translated):
 		if self.focused_index != None:
-			self.ui_elements[self.focused_index].key_pressed(game=game, key=key, mod=mod, translated=translated)
+			self.active_property_ui_group[self.focused_index].key_pressed(game=game, key=key, mod=mod, translated=translated)
+		if key == pg.K_TAB and len(self.active_property_ui_group) > 0:
+			if (mod & pg.KMOD_SHIFT):
+				# Shift-tab
+				if self.focused_index == None:
+					self.focused_index = last_index(self.active_property_ui_group)
+				else:
+					self.active_property_ui_group[self.focused_index].unfocus()
+
+					self.focused_index -= 1
+					if self.focused_index < 0:
+						self.focused_index = last_index(self.active_property_ui_group)
+			else:
+				if self.focused_index == None:
+					self.focused_index = 0
+				else:
+					self.active_property_ui_group[self.focused_index].unfocus()
+
+					self.focused_index += 1
+					if self.focused_index > last_index(self.active_property_ui_group):
+						self.focused_index = 0
+
+			self.active_property_ui_group[self.focused_index].focus()
+			self.active_property_ui_group[self.focused_index].highlight_all()
 
 class ShopState:
 	def __init__(self):
@@ -1759,7 +2017,7 @@ class ShopState:
 		pass
 	def key_pressed(self, game, key, mod, translated):
 		pass
-	def mouse_button_pressed(self, game, button):
+	def mouse_button_pressed(self, game, button, mouse_pos):
 		pass
 	def enter(self):
 		pass
@@ -1767,7 +2025,7 @@ class ShopState:
 		pass
 
 class BattleState:
-	def __init__(self):
+	def __init__(self, friendly_units, enemy_units):
 		#self.turn = Turn(initial_active=True)
 		self.is_player_turn = True
 		self.active_subturn_slot = 0 # The slot which has the enemy currently doing its own subturn
@@ -1777,27 +2035,40 @@ class BattleState:
 		#self.selected_action = None
 		self.selected_action_button = None
 
-		self.friendlies = []
-		self.enemies = []
+		# self.friendlies = []
+		# self.enemies = []
 
 		# Set up warrior and put in slot 0, usw.
-		warrior_unit = game.unit_db.generate_unit(name="Warrior", team=0, slot=0)
-		rogue_unit = game.unit_db.generate_unit(name="Rogue", team=0, slot=1)
-		self.friendlies.append(warrior_unit)
-		self.friendlies.append(rogue_unit)
+		self.friendly_slots = friendly_units
+		self.enemy_slots = enemy_units
 
-		wolf_unit = game.unit_db.generate_unit(name="Wolf", team=1, slot=0)
-		wolf2_unit = game.unit_db.generate_unit(name="Wolf", team=1, slot=1)
-		human_unit = game.unit_db.generate_unit(name="Human", team=1, slot=2)
-		human2_unit = game.unit_db.generate_unit(name="Human", team=1, slot=3)
-		self.enemies.append(wolf_unit)
-		self.enemies.append(wolf2_unit)
-		self.enemies.append(human_unit)
-		self.enemies.append(human2_unit)
+		# warrior_unit = game.unit_db.generate_unit(name="Warrior", team=0, slot=0)
+		# rogue_unit = game.unit_db.generate_unit(name="Rogue", team=0, slot=1)
+		# self.friendlies.append(warrior_unit)
+		# self.friendlies.append(rogue_unit)
+
+		# wolf_unit = game.unit_db.generate_unit(name="Wolf", team=1, slot=0)
+		# wolf2_unit = game.unit_db.generate_unit(name="Wolf", team=1, slot=1)
+		# human_unit = game.unit_db.generate_unit(name="Human", team=1, slot=2)
+		# human2_unit = game.unit_db.generate_unit(name="Human", team=1, slot=3)
+		# self.enemies.append(wolf_unit)
+		# self.enemies.append(wolf2_unit)
+		# self.enemies.append(human_unit)
+		# self.enemies.append(human2_unit)
+	@property
+	def friendlies(self):
+		'''Return a list of all friendly units (ignores empty slots)'''
+		return [e for e in self.friendly_slots if e != None]
+	@property
+	def enemies(self):
+		'''Return a list of all enemy units (ignores empty slots)'''
+		return [e for e in self.enemy_slots if e != None]
+
+
 	def enter(self):
 		pass
 	def exit(self):
-		pass		
+		pass
 	def get_valid_targets(self, source_unit, target_set):
 		if target_set == TargetSet.All:
 			return self.friendlies+self.enemies
@@ -1830,7 +2101,10 @@ class BattleState:
 			# and starting player turn
 			self.is_player_turn = True
 			for f in self.friendlies:
-				f.action_points = 1			
+				f.action_points = 1
+
+
+
 	def update(self, game):
 
 
@@ -1986,13 +2260,13 @@ class BattleState:
 						start=self.selected_action_button.rect.center_right,
 						end=game.mouse_pos)
 
-			game.queue_surface(surface=surface, depth=-10, pos=Vec(0,0))				
+			game.queue_surface(surface=surface, depth=-10, pos=Vec(0,0))
 	def draw(self, game):
-		game.queue_surface(surface=pointer_cursor_surface, depth=-100, pos=game.mouse_pos)		
+		game.queue_surface(surface=pointer_cursor_surface, depth=-100, pos=game.mouse_pos)
 	def mouse_button_pressed(self, game, button, mouse_pos):
-		pass		
+		pass
 	def key_pressed(self, game, key, mod, translated):
-		pass		
+		pass
 	def get_allies(self, team):
 		if team == 0:
 			return self.friendlies
@@ -2002,7 +2276,7 @@ class BattleState:
 		if team == 0:
 			return self.enemies
 		if team == 1:
-			return self.friendlies	
+			return self.friendlies
 
 class RoomType(Enum):
 	Battle = 0
@@ -2011,16 +2285,31 @@ class RoomType(Enum):
 class Room:
 	def __init__(self, room_type):
 		self.room_type = room_type
-	def enter(self):
+	def enter(self, friendly_units, enemy_units):
 		if self.room_type == RoomType.Battle:
-			return BattleState()
+
+			return BattleState(	friendly_units=friendly_units,
+								enemy_units=enemy_units)
 		elif self.room_type == RoomType.Shop:
 			return ShopState()
 
 class CampaignState:
-	def __init__(self):
+	def __init__(self, game):
+		self.game = game
+
 		self.rooms = [Room(room_type=RoomType.Battle) for i in range(4)]
 		self.rooms.append(Room(room_type=RoomType.Shop))
+
+		# The units currently in the player's party
+		# 4 slots
+		self.player_units = [None]*4
+		self.add_unit_to_party(name="Warrior", slot=0)
+		self.add_unit_to_party(name="Rogue", slot=1)
+	def add_unit_to_party(self, name, slot):
+		if slot >= 0 and slot < 4:
+			# If the slot given is a valid slot number
+			self.player_units[slot] = self.game.unit_db.generate_unit(name=name, team=0, slot=slot)
+
 	def room_index_to_rect(self, i):
 		return Rect(	pos=Vec(100+100*i,screen_height/2),
 						size=Vec(50,50))
@@ -2044,7 +2333,22 @@ class CampaignState:
 							depth=0,
 							x_center=False,
 							y_center=False)
-	
+
+		self.game.queue_drawtext(	text="Party",
+									font=main_font_10_u,
+									color=c.ltgrey,
+									pos=Vec(900, 150),
+									depth=0)
+
+		for i, unit in enumerate(self.player_units):
+			if unit == None:
+				continue
+			self.game.queue_drawtext(	text=unit.name,
+										font=main_font_7,
+										color=c.white,
+										pos=Vec(900, 200+i*50),
+										depth=0)
+
 		for i, room in enumerate(self.rooms):
 			room_rect = self.room_index_to_rect(i)
 			if room_rect.intersect(point=game.mouse_pos):
@@ -2084,11 +2388,32 @@ class CampaignState:
 				room_rect = self.room_index_to_rect(i)
 
 				if room_rect.intersect(point=mouse_pos):
-					game.enter_state(room.enter())
+					enemy_units = game.battle_db.get_random_battle_units(unit_db=game.unit_db)
+					game.enter_state(room.enter(friendly_units=self.player_units,
+												enemy_units=enemy_units))
 
 
 	def key_pressed(self, game, key, mod, translated):
 		pass
+
+class BattleDatabase:
+	def __init__(self, battle_data):
+		self.battles = []
+
+		with open(battle_data) as f:
+			for line in f:
+				match = re.search('^\[(.*)\,(.*)\,(.*)\,(.*)\]', line.rstrip())
+				if match:
+					self.battles.append([	match.group(1),
+											match.group(2),
+											match.group(3),
+											match.group(4)])
+				else:
+					error.log("Invalid line found while loading battles from {}".format(battle_data))
+
+	def get_random_battle_units(self, unit_db):
+		names = random.choice(self.battles)
+		return [unit_db.generate_unit(name=n, team=1, slot=i) for i, n in enumerate(names)]
 
 class Game:
 	def __init__(self):
@@ -2097,11 +2422,13 @@ class Game:
 
 		pg.init()
 		self.screen = Surface.from_pgsurface(pg.display.set_mode((screen_width, screen_height)))
-		pg.mouse.set_visible(False)		
-		pg.key.set_repeat(250, 32)
+		pg.mouse.set_visible(False)
+		#pg.key.set_repeat(250, 32)
+
 
 		self.action_db = ActionSchematicDatabase(action_data_filepath="actions.dat")
 		self.unit_db = UnitSchematicDatabase(unit_data="units.dat", animation_data="animations.dat")
+		self.battle_db = BattleDatabase(battle_data="battles.dat")
 
 		self.state_stack = []
 		self.enter_state(MainMenuState())
@@ -2134,7 +2461,7 @@ class Game:
 		# phantom animations that carry over between states.
 		self.draw_queue = []
 		self.active_animations = []
-	
+
 	def draw(self):
 		# Clear screen
 		self.screen.fill(c.dkgrey)
@@ -2164,7 +2491,7 @@ class Game:
 					font=main_font_5, x_center=False, y_center=False)
 
 		# Flip buffer to display
-		# If debugger is active, let it draw its stuff and then flip the display itself		
+		# If debugger is active, let it draw its stuff and then flip the display itself
 		if debug.debugger == None:
 			pg.display.flip()
 
@@ -2176,7 +2503,7 @@ class Game:
 			if event.type == pg.QUIT:
 				sys.exit()
 			elif event.type == pg.KEYDOWN:
-				#self.input.set_repeat_key(event.key)
+				self.input.set_repeat_key(event.key)
 				self.active_state.key_pressed(game=self, key=event.key, mod=event.mod, translated=event.unicode)
 			elif event.type == pg.KEYUP:
 				self.input.unset_repeat_key(event.key)
@@ -2185,7 +2512,7 @@ class Game:
 				self.active_state.mouse_button_pressed(game=self, button=event.button, mouse_pos=mouse_pos)
 
 		# Clear draw queue for this frame
-		self.draw_queue = []		
+		self.draw_queue = []
 
 		# Tick all animations in active_animations
 		# If any animation finishes, notify its owner that it has (by setting animation_finished)
@@ -2236,20 +2563,20 @@ class Game:
 								 					font=font,
 								 					x_center=x_center,
 								 					y_center=y_center)))
-	def queue_surface(self, surface, depth, pos):
+	def queue_surface(self, surface, depth, pos, x_align=AlignX.Left, y_align=AlignY.Up):
 		self.draw_queue.append(	(depth,
 								 lambda: draw_surface(	target=self.screen,
 														surface=surface,
-														pos=pos)))
+														pos=pos,
+														x_align=x_align,
+														y_align=y_align)))
 		#self.draw_queue.append((depth, surface, pos))
 	def start_animation(self, animation, pos, owner):
 		self.active_animations.append({ 'animation': deepcopy(animation),
 										'pos': pos,
 										'owner': owner})
-	def start_battle(self):
-		self.enter_state(BattleState())
 	def start_campaign(self):
-		self.enter_state(CampaignState())
+		self.enter_state(CampaignState(game=self))
 	def start_editor(self):
 		self.enter_state(EditorState())
 

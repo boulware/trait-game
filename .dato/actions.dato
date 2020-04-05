@@ -1,0 +1,48 @@
+name is Rest
+	has description "Restores 2 vigor to self."
+	targets Self
+	heals 2 Vigor
+name is Medium Strike
+	has description "Deals 5 vigor damage to target. Requires 2 vigor."
+	targets Single Enemy
+	deals 5 Vigor damage
+	requires 2 Vigor
+name is Intimidate
+	has description "Deals 5 focus damage to target. Requires 1 focus."
+	targets Single Enemy
+	deals 5 Focus damage
+	requires 1 Focus
+name is Medium Bash
+	has description "Deals 4 armor damage to target. Requires 1 focus."
+	targets Single Enemy
+	deals 4 Armor damage
+	requires 1 Focus
+name is Light Strike
+	has description "Deals 3 vigor damage to target. Requires 2 vigor."
+	targets Single Enemy
+	deals 3 Vigor damage
+	requires 2 Vigor
+name is Bite
+	has description "Deals 4 vigor damage. Requires 4 focus."
+	targets Single Enemy
+	deals 4 Vigor damage
+	requires 4 Focus
+name is Howl
+	has description "Gives 4 focus to all allies. Requires 4 focus."
+	targets All Allies
+	heals 1 Focus
+name is Heal
+	has description "Heals all allies for 2 vigor. Requires 2 focus."
+	targets All Allies
+	heals 2 Vigor
+	requires 2 Focus
+name is Rig Up
+	has description "Transfer 1 armor from self to another ally. Requires 1 armor.""
+	targets Other Ally
+	heals 1 Armor
+	requires 1 Armor
+name is Attack
+	has description "Deals 3 vigor damage to target. Requires 2 focus."
+	targets Single Enemy
+	deals 3 Vigor damage
+	requires 2 Focus

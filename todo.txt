@@ -1,3 +1,10 @@
+KEY:
+'*' indicates an individual problem
+'\*' indicates the problem has been solved
+'	=>' indicates some extra information related to the most recent asterisk
+
+----------------------------------------------------------------------------
+
 \* Tweens with negative values in the end_pos don't work properly.
 	=> It's because I'm not parsing negative numbers properly in the regex
 \* Tweens with negative jerk throw an error when t=0 (because 0 to a negative power)
@@ -7,3 +14,5 @@
 *Action preview while selecting a target for an ally's action incorrectly previews the damage on all alies, regardless of where the mouse is.
 *Convert queue_surface stuff that uses primitives like lines/rects into queue_drawline/queue_drawrect calls instead. They might be faster (they certainly wouldn't be slower... right?)
 *There's a confusion with mouse button indices. On the event queue, left click is index=1, but in pg.mouse.get_state() [or whatever it is], left click is index=0. This needs to be sorted out, especially with the util.KeyState (if I'm still going to continue to use that)
+*Holding down key (and others) in debug menu doesn't repeat properly. It does 3 ticks and then stops? Maybe because of the interaction between the pg.event key stuff and my InputState class [Indeed, disabling the pygame keyrepeat makes it work again. And naturally, this makes key repeat for something like the editor not work properly, so we need to figure out a way to reconcile all of this]
+*Sometimes inputs can jump between states. I need to clear inputs or ignore them for the first frame or something. (Example: when clicking on a battle room in campaign, it will select a skill use as soon as the battle opens)

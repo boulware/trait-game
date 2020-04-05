@@ -142,6 +142,8 @@ def is_positive_index(container, index):
 	if isinstance(container, (list,tuple)):
 		if in_range(index, 0, len(container)):
 			return True
+		else:
+			return False
 	else:
 		print('Tried is_positive_index for invalid container type.')
 		raise TypeError()

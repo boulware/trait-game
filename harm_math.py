@@ -13,6 +13,11 @@ class Vec:
 	def __sub__(self, other):
 		return Vec(self.x - other.x, self.y - other.y)
 
+	def __rmul__(self, other):
+		return Vec(other*self.x, other*self.y)
+	def __mul__(self, other):
+		return Vec(other*self.x, other*self.y)
+
 	def __truediv__(self, divisor):
 		return Vec(self.x / divisor, self.y / divisor)
 

@@ -1,0 +1,79 @@
+name is Wolf
+	has 4 vigor
+	has 0 armor
+	has 4 focus
+
+	has action Bite
+		targets single enemy
+		requires 4 focus
+		does 4 vigor damage
+
+	has action Howl
+		targets all allies
+		heals 1 focus
+
+
+# Valid alternative words:
+#
+# vigor/v/red/r
+# armor/a/yellow/y
+# focus/f/blue/b
+# target(s)/hit(s)
+# single/one
+# require(s)/need(s)
+# does/deal(s)
+# (vigor damage)/(damage to vigor)
+# allies/friendlies
+# heal(s)/recover(s)/increase(s)/boost(s)
+
+
+
+###########################################
+wolf_schematic = EnemySchematic(	traits={T.Vigor:4, T.Armor:0, T.Focus:4}, 
+											idle_animation=FullAnimation(	sprites=[wolf_enemy_surface],
+																			sprite_lengths=[1],
+																			anchor_points=[Vec(0,wolf_enemy_surface.get_height())]),
+											hover_idle_animation=FullAnimation(	sprites=[wolf_enemy_highlighted_surface],
+																				sprite_lengths=[1],
+																				anchor_points=[Vec(0,wolf_enemy_highlighted_surface.get_height())])
+											)
+		# Bite
+		bite_action = Action(	name="Bite",
+								owner=None,
+								target_set=TargetSet.SingleEnemy,
+								required={T.Vigor:0, T.Focus:4, T.Armor:0},
+								damages={T.Vigor:4, T.Focus:0, T.Armor:0})
+		bite_action.add_sub_action(lambda source, targets: deal_damage(kwargs={	'source': source,
+																				'targets': targets, 
+																				'damages': bite_action.damages}))
+
+		# Howl
+		howl_action = Action(	name="Howl",
+								owner=None,
+								target_set=TargetSet.AllAllies,
+								required={T.Vigor:0, T.Focus:0, T.Armor:0},
+								damages={T.Vigor:0, T.Focus:-1, T.Armor:0})
+		howl_action.add_sub_action(lambda source, targets: deal_damage(kwargs={	'source': source,
+																				'targets': targets, 
+																				'damages': howl_action.damages}))
+
+		wolf_schematic.add_action(bite_action)
+		wolf_schematic.add_action(howl_action)
+
+		bite_animation_length = 60
+		bite_sprite_animation = FullAnimation(	tweens=[Tween(end_pos=Vec(-100,0), jerk=0.2, duration=rest_animation_length)],
+												duration=bite_animation_length,
+												sprites=[wolf_enemy_surface],
+												sprite_lengths=[bite_animation_length],
+												anchor_points=[Vec(0, wolf_enemy_surface.get_height())])
+		wolf_schematic.set_animation(	action_index=0,
+										animation=bite_sprite_animation)
+
+		howl_animation_length = 60
+		howl_sprite_animation = FullAnimation(	tweens=[Tween(end_pos=Vec(20,0), jerk=0.5, duration=rest_animation_length)],
+												duration=howl_animation_length,
+												sprites=[wolf_enemy_howl_surface],
+												sprite_lengths=[howl_animation_length],
+												anchor_points=[Vec(0, wolf_enemy_howl_surface.get_height())])
+		wolf_schematic.set_animation(	action_index=1,
+										animation=howl_sprite_animation)
