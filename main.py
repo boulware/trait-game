@@ -1,5 +1,5 @@
 import os, sys
-os.environ['SDL_VIDEO_WINDOW_POS'] = "%d,%d" % (100,30)
+os.environ['SDL_VIDEO_WINDOW_POS'] = "%d,%d" % (0,30)
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
 
 import math
@@ -28,7 +28,7 @@ typeable_chars = 	  [chr(i) for i in range(ord('a'),ord('z')+1)] \
 random.seed()
 
 import pygame as pg
-screen_width, screen_height = 1400,800
+screen_width, screen_height = 1600,800
 game = None
 
 # -- State class template --
@@ -49,7 +49,6 @@ game = None
 #  	def exit(self):
 #  		pass
 
-
 pg.font.init()
 main_font_10 = pg.font.Font("font.ttf", 28)
 main_font_10_u = pg.font.Font("font.ttf", 28)
@@ -62,9 +61,9 @@ main_font_4 = pg.font.Font("font.ttf", 12)
 main_font_2 = pg.font.Font("font.ttf", 8)
 
 slot_width = 200
-enemy_slot_positions = [600,800,1000,1200]
-friendly_slot_positions = [200,400,600]
-# [top of screen => trait bars, top of screen => enemy sprite, top of screen => action icons]
+friendly_slot_positions = [0+i*slot_width for i in range(4)]
+enemy_slot_positions = [4*slot_width+i*slot_width for i in range(4)]
+# [top of screen => trait bars, top of screen => enemy sprite, top of screen => skill icons]
 enemy_ui_paddings = [70, 100, 380, 380]
 friendly_ui_paddings = [70, 100, 380, 380]
 
@@ -89,7 +88,8 @@ class T(Enum):
 
 trait_count = 3
 trait_colors = {T.Vigor: c.red, T.Armor:c.yellow, T.Focus: c.ltblue}
-trait_strings = {T.Vigor: "Vigor", T.Armor: "Armor", T.Focus: "Focus"}
+trait_to_string = {T.Vigor: "vigor", T.Armor: "armor", T.Focus: "focus"}
+string_to_trait = {value:key for key,value in trait_to_string.items()}
 
 pointer_cursor_surface = Surface.from_file("Cursor.png")
 
@@ -232,19 +232,19 @@ def draw_healthbar(game, color, pos, value, max_value, preview_damage=0):
 	return Rect(pos, Vec(healthbar_width, healthbar_height))
 
 # duration - length of timer measured in frames
-# action - optional function to execute once the timer finishes
+# skill - optional function to execute once the timer finishes
 class Timer:
 	"""Tracks ticks and when the timer has elapsed.
 	(optional) Automatically executes function once timer elapses"""
-	def __init__(self, duration, action=None):
+	def __init__(self, duration, skill=None):
 		self.duration = duration
 		self.current_frame = 0
-		self.action = action
+		self.skill = skill
 	def tick(self):
 		self.current_frame += 1
 		if self.current_frame >= self.duration:
-			if self.action:
-				self.action()
+			if self.skill:
+				self.skill()
 			return True
 		else:
 			return False
@@ -263,118 +263,6 @@ def get_sprite_slot_pos(slot, team):
 		y = enemy_ui_paddings[2]
 
 	return Vec(x,y)
-
-
-
-# class Friendly:
-# 	def __init__(self, slot, traits, idle_animation, hover_idle_animation):
-# 		self.max_traits = copy(traits)
-# 		self.cur_traits = copy(self.max_traits)
-# 		self.slot = slot
-# 		self.team = 0
-# 		self.actions = []
-# 		self.action_points = 1
-
-# 		self.idle_animation = copy(idle_animation)
-# 		self.hover_idle_animation = copy(hover_idle_animation)
-
-# 		self.action_animations = [] # Concurrent array to self.actions
-# 		self.action_buttons = [] # Concurrent array to self.actions
-
-# 		self.current_action_index = None
-# 	def __deepcopy__(self, memo):
-# 		other = Friendly(	slot=self.slot,
-# 							traits=self.max_traits,
-# 							idle_animation=self.idle_animation,
-# 							hover_idle_animation=self.hover_idle_animation)
-
-# 		other.actions = deepcopy(self.actions)
-# 		other.action_animations = deepcopy(self.action_animations)
-# 		other.action_buttons
-# 	def add_action(self, action):
-# 		action.owner = self
-# 		self.actions.append(deepcopy(action))
-# 		self.action_animations.append(self.idle_animation)
-# 		self.action_buttons.append(ActionButton(pos=Vec(x=friendly_slot_positions[self.slot],
-# 														y=friendly_ui_paddings[3] + (len(self.actions)-1)*action_button_size.y),
-# 												linked_action=action))
-# 	def set_animation(self, action_index, animation):
-# 		if action_index > len(self.action_animations)-1:
-# 			return
-
-# 		self.action_animations[action_index] = animation
-# 	@property
-# 	def rect(self):
-# 		rect = self.current_animation.rect
-# 		rect.pos += get_sprite_slot_pos(slot=self.slot, team=self.team)
-# 		return rect
-# 	@property
-# 	def alive(self):
-# 		if self.cur_traits[T.Vigor] > 0:
-# 			return True
-# 		else:
-# 			return False
-# 	@property
-# 	def current_animation(self):
-# 		if self.current_action_index is None:
-# 			return self.idle_animation
-# 		else:
-# 			return self.action_animations[self.current_action_index]
-# 	@property
-# 	def action_finished(self):
-# 		if self.current_animation.finished:
-# 			return True
-# 		else:
-# 			return False
-# 	def start_action(self, action_index):
-# 		if self.alive:
-# 			self.current_action_index = action_index
-# 	@property
-# 	def action_points(self):
-# 		return self._action_points
-# 	@action_points.setter
-# 	def action_points(self, value):
-# 		self._action_points = value
-# 		surface_size = main_font_5.size(str(value))
-# 		self.action_points_surface = Surface(Vec.fromtuple(surface_size))
-
-# 		# Draws action point text
-# 		if self.action_points == 0:
-# 			text_color = c.grey
-# 		else:
-# 			text_color = c.white
-# 		draw_text(	target=self.action_points_surface,
-# 					color=text_color,
-# 					pos=Vec(0,0),
-# 					text=str(self.action_points),
-# 					font=main_font_5,
-# 					x_center=False,
-# 					y_center=False)
-# 	def draw(self, target, mouse_pos, preview_action=None):
-# 		if self.alive:
-# 			x_pos = friendly_slot_positions[self.slot]
-
-# 			# Draw trait bars
-# 			cur_y_offset = 0 # Tracks y offset for consecutive stacked trait bars
-# 			for trait, max_value in self.max_traits.items():
-# 				cur_trait = self.cur_traits[trait]
-# 				preview_damage = 0
-# 				if preview_action is not None:
-# 					preview_damage = preview_action.damages[trait]
-
-# 				draw_healthbar(	target, trait_colors[trait],
-# 								Vec(x_pos, friendly_ui_paddings[1] + cur_y_offset),
-# 								cur_trait, max_value, preview_damage)
-
-# 				cur_y_offset += healthbar_height
-
-# 			# Draws action buttons
-# 			if self.action_points > 0:
-# 				for button in self.action_buttons:
-# 					button.draw(target=target, mouse_pos=mouse_pos)
-# 			else:
-# 				for button in self.action_buttons:
-# 					button.draw(target=target, mouse_pos=mouse_pos)
 
 def play_animation(kwargs):
 	game = kwargs['game']
@@ -449,127 +337,82 @@ class TargetSet(Enum):
 	SingleEnemy = 6
 	AllEnemies = 7
 
-target_set_strings = {	TargetSet.All: "All",
-						TargetSet.Self: "Self",
-						TargetSet.SingleAlly: "Single Ally",
-						TargetSet.OtherAlly: "Other Ally",
-						TargetSet.SingleEnemy: "Single Enemy",
-						TargetSet.AllEnemies: "All Enemies",
-						TargetSet.AllAllies: "All Allies"}
+target_set_to_string = {	TargetSet.All: "all",
+							TargetSet.Self: "self",
+							TargetSet.SingleAlly: "single ally",
+							TargetSet.OtherAlly: "other ally",
+							TargetSet.SingleEnemy: "single enemy",
+							TargetSet.AllEnemies: "all enemies",
+							TargetSet.AllAllies: "all allies"}
 
-class ActionSchematic:
-	def __init__(self, name, target_set, required, damages, description=""):
-		self.sub_actions = []
+string_to_target_set = {value:key for key,value in target_set_to_string.items()}
+
+class DamageEffect:
+	def __repr__(self):
+		return 'damage {}'.format([e for k,e in self.base_damage.items()])
+	def __init__(self, base_damage):
+		self.base_damage = base_damage
+	def apply(self, target):
+		# Calculate all damages before applying them to avoid order issues
+		# (specifically the effect of armor on net_vigor_damage)
+		net_vigor_damage = max(1, self.base_damage[T.Vigor] - target.armor)
+		net_armor_damage = self.base_damage[T.Armor]
+		net_focus_damage = self.base_damage[T.Focus]
+
+		target.vigor -= net_vigor_damage
+		target.armor -= net_armor_damage
+		target.focus -= net_focus_damage
+
+class HealEffect:
+	def __repr__(self):
+		return 'heal {}'.format([e for k,e in self.base_heal_amounts.items()])
+	def __init__(self, base_heal_amounts):
+		self.base_heal_amounts = base_heal_amounts
+	def apply(self, target):
+		target.vigor += self.base_heal_amounts[T.Vigor]
+		target.armor += self.base_heal_amounts[T.Armor]
+		target.focus += self.base_heal_amounts[T.Focus]
+
+class SkillSchematic:
+	def __init__(self, name, required, effect_groups):
 		self.name = name
-		self.description = description
-		self.target_set = target_set
 		self.required = required
-		self.damages = damages
-	@classmethod
-	def from_string(cls, s):
-		name = "<PLACEHOLDER NAME>"
-		description = "<PLACEHOLDER DESCRIPTION>"
-		target_set = None
-		required = {T.Vigor: 0, T.Armor: 0, T.Focus: 0}
-		damages = {T.Vigor: 0, T.Armor: 0, T.Focus: 0}
+		self.effect_groups = effect_groups # List of tuples: [(target_set, list of effects), ...]
+	def __repr__(self):
+		return 'name: {}, req: {}, effects_groups: {}'.format(self.name,self.required,self.effect_groups)
+	def generate_skill(self, owner):
+		return Skill(schematic=self, owner=owner)
 
-		for line in s.splitlines():
-			match = re.search('^name is (.*)', line.rstrip())
-			if match:
-				name = match.group(1)
-				continue
-
-			line_match = re.search('\t(has description) (.*)', line.rstrip())
-			if line_match:
-				arg_match = re.search('"(.*)"', line_match[2])
-				if arg_match:
-					description = arg_match[1]
-				continue
-			line_match = re.search('\t(targets) (.*)', line.rstrip())
-			if line_match:
-				target_set = next(key for key, value in target_set_strings.items() if value == line_match[2])
-				continue
-			line_match = re.search('\t(heals) (.*)', line.rstrip())
-			if line_match:
-				# ex "(heals) 3 Focus damage"
-				match = re.search('([0-9]*) ([a-zA-Z]*)', line_match[2])
-				if match:
-					value = int(match[1])
-					trait = next(key for key, value in trait_strings.items() if value == match[2])
-					damages[trait] = -value # Negative for healing
-				continue
-			line_match = re.search('\t(deals) (.*)', line.rstrip())
-			if line_match:
-				# ex: "(deals) 5 Vigor damage"
-				# TODO: "damage" optional? i.e., allow "(deals) 5 Vigor"?
-				match = re.search('([0-9]*) ([a-zA-Z]*) damage', line_match[2])
-				if match:
-					value = int(match[1])
-					trait = next(key for key, value in trait_strings.items() if value == match[2])
-					damages[trait] = value
-				continue
-			line_match = re.search('\t(requires) (.*)', line.rstrip())
-			if line_match:
-				# "(requires) 1 Focus"
-				match = re.search('([0-9]*) ([a-zA-Z]*)', line_match[2])
-				if match:
-					value = int(match[1])
-					trait = next(key for key, value in trait_strings.items() if value == match[2])
-					required[trait] = value
-				continue
-		return cls(	name=name,
-					description=description,
-					target_set=target_set,
-					required=required,
-					damages=damages)
-	def generate_action(self, owner):
-		return Action(schematic=self, owner=owner)
-	def add_sub_action(self, sub_action):
-		self.sub_actions.append(sub_action)
-	def serialize(self):
-		s = ""
-		s += "name is {}\n".format(self.name)
-		s += "\thas description \"{}\"\n".format(self.description)
-		s += "\ttargets {}\n".format(target_set_strings[self.target_set])
-		for trait, value in self.damages.items():
-			if value == 0: continue
-			s += "\tdeals {} {} damage\n".format(value, trait_strings[trait])
-		for trait, value in self.required.items():
-			if value == 0: continue
-			s += "\trequires {} {}\n".format(value, trait_strings[trait])
-
-		return s
-class Action:
+class Skill:
 	def __init__(self, schematic, owner):
 		self.name = schematic.name
-		self.description = schematic.description
-		self.target_set = schematic.target_set
 		self.required = copy(schematic.required)
-		self.damages = copy(schematic.damages)
-
+		self.effect_groups = copy(schematic.effect_groups)
 		self.owner = owner
+	def apply_effects(self, target_groups):
+		for i, _, effects in enumerate(self.effect_groups):
+			for effect in effects:
+				for target in target_groups[i]:
+					effect.apply(target=target)
 
-		self.sub_actions = []
-		self.sub_actions.append(lambda source, targets: deal_damage(kwargs={'source': source,
-																			'targets': targets,
-																			'damages': self.damages}))
-	def execute(self, kwargs={}):
-		if self.usable is True:
-			for sub_action in self.sub_actions:
-				sub_action(**kwargs)
-			return True
-		else:
-			return False
+	# def execute(self, kwargs={}):
+	# 	if self.usable is True:
+	# 		for effect in self.effects:
+	# 			effect(**kwargs)
+	# 		return True
+	# 	else:
+	# 		return False
 	@property
 	def usable(self):
 		valid_target = False
 
-		if self.target_set == TargetSet.OtherAlly:
-			for ally in game.active_state.get_allies(team=self.owner.team):
-				if ally.alive == True and ally != self.owner:
-					valid_target = True
-		else:
-			valid_target = True
+		# FIX
+		# if self.target_set == TargetSet.OtherAlly:
+		# 	for ally in game.active_state.get_allies(team=self.owner.team):
+		# 		if ally.alive == True and ally != self.owner:
+		# 			valid_target = True
+		# else:
+		# 	valid_target = True
 
 		if valid_target == False:
 			return False
@@ -577,49 +420,106 @@ class Action:
 			if value < self.required[trait]:
 				return False
 		return True
-class ActionSchematicDatabase:
-	def __init__(self, action_data_filepath):
+class SkillSchematicDatabase:
+	def __init__(self, skill_data_filepath):
 		self.schematics = []
 
-		with open(action_data_filepath) as f:
-			in_action = False
-			action_string = ""
-			for line in f:
-				if in_action == False:
-					match = re.match('name is', line)
-					if match:
-						in_action = True
-						action_string += line
-						continue
-				else:
-					match = re.match('name is', line)
-					if not match:
-						action_string += line
-						continue
-					if match:
-						# We found the beginning of the next action, so we stop here,
-						# and parse everything we've found so far as an action,
-						# and add it to our schematics list
-						action = ActionSchematic.from_string(action_string)
-						self.schematics.append(action)
+		class Token(Enum):
+			Root = 0
+			Skill = 1
+			Target = 2
 
-						# Set next action string to begin with "name is ..."
-						# and repeat the process for all lines in the data file
-						action_string = line
+		def next_line(file):
+			try:
+				return next(file)
+			except StopIteration:
+				return None
+
+		with open(skill_data_filepath) as f:
+			name = '<NAME UNDECLARED>'
+			required = {T.Vigor:0, T.Armor:0, T.Focus:0}
+			effect_groups = []
+
+			current_target_set = TargetSet.Nothing
+			current_effects = []
+
+			tokens = [Token.Root]
+			line = next_line(f)
+			while True:
+				if line == None:
+					# We're at end of file, so wrap up targets/skills and break.
+					if tokens[-1] == Token.Target:
+						effect_groups.append((current_target_set, current_effects))
+						del tokens[-1] # pop Token.Target
+						continue
+					elif tokens[-1] == Token.Skill:
+						self.schematics.append(SkillSchematic(name=name, required=copy(required), effect_groups=copy(effect_groups)))
+						break
+				if tokens[-1] == Token.Root:
+					match = re.search('skill:(.*)', line.strip())
+					if match:
+						name = match[1].strip()
+						required = {T.Vigor:0, T.Armor:0, T.Focus:0}
+						effect_groups = []
+						tokens.append(Token.Skill)
+						line = next_line(f)
+						continue
+				elif tokens[-1] == Token.Skill:
+					match = re.search('requires:(.*)', line.strip())
+					if match:
+						amount_strings = [e.strip() for e in match[1].split(',')]
+						for i,s in enumerate(amount_strings):
+							required[T(i)] = int(s)
+						line = next_line(f)
 						continue
 
-			# If we're still in an action after end of file, we need to complete
-			# adding the last action
-			if in_action:
-				action = ActionSchematic.from_string(action_string)
-				self.schematics.append(action)
+					match = re.search('target:(.*)', line.strip())
+					if match:
+						current_target_set = string_to_target_set[match[1].strip()]
+						current_effects = []
+						tokens.append(Token.Target)
+						line = next_line(f)
+						continue
+
+					match = re.search('skill:(.*)', line.strip())
+					if match:
+						# End of current skill.
+						self.schematics.append(SkillSchematic(name=name, required=copy(required), effect_groups=copy(effect_groups)))
+						del tokens[-1] # pop Token.Skill
+						continue # Catches on Token.Root and start iterating new skill
+				elif tokens[-1] == Token.Target:
+					match = re.search('(?:target|skill):(.*)', line.strip())
+					if match:
+						# End of current target
+						effect_groups.append((current_target_set, current_effects))
+						del tokens[-1] # pop Token.Target
+						continue # Catches on Token.Skill, and routes appropriately to either next target or skill
+					match = re.search('(damage|heal|stun)\s*:\s*(.*)', line.strip())
+					if match:
+						trait_amounts = {T.Vigor:0, T.Armor:0, T.Focus:0}
+						amount_strings = [e.strip() for e in match[2].split(',')]
+						for i,s in enumerate(amount_strings):
+							trait_amounts[T(i)] = int(s)
+
+						if match[1].strip() == "damage":
+							current_effects.append(DamageEffect(base_damage=trait_amounts))
+						elif match[1].strip() == "heal":
+							current_effects.append(HealEffect(base_heal_amounts=trait_amounts))
+						elif match[1].strip() == "stun":
+							pass
+
+						line = next_line(f)
+						continue
+
 	def get_list_of_schematic_names(self):
 		return [e.name for e in self.schematics]
 	def get_schematic_by_name(self, name):
 		return next(s for s in self.schematics if s.name == name)
-	def generate_action(self, name, owner):
+	def generate_skill(self, name, owner):
+		if name == '':
+			return None
 		schematic = next(s for s in self.schematics if s.name == name)
-		return schematic.generate_action(owner=owner)
+		return schematic.generate_skill(owner=owner)
 
 class UnitSchematic:
 	def __init__(self, name, description, traits, idle_animation, hover_idle_animation):
@@ -629,16 +529,17 @@ class UnitSchematic:
 		self.idle_animation = copy(idle_animation)
 		self.hover_idle_animation = copy(hover_idle_animation)
 
-		self.action_schematics = []
-		self.action_animations = [] # Concurrent array to self.actions
+		self.skill_schematics = [None] * c.skill_slots
+		self.skill_animations = [None] * c.skill_slots # Concurrent array to self.skills
 	@classmethod
 	def from_string(cls, s):
+		pass
 		name = "<PLACEHOLDER NAME>"
 		description = "<PLACEHOLDER DESCRIPTION>"
 		traits = {T.Vigor: 0, T.Armor: 0, T.Focus: 0}
 		idle_animation = None
 		hover_idle_animation = None
-		action_schematics = []
+		skill_schematics = []
 
 		for line in s.splitlines():
 			match = re.search('^name is (.*)', line.rstrip())
@@ -667,18 +568,18 @@ class UnitSchematic:
 			line_match = re.search('\thas (.*)', line.rstrip())
 			if line_match:
 				# ex: "(has) 50 Vigor"
-				# or: "(has) action Rest"
+				# or: "(has) skill Rest"
 				match = re.search('([0-9]+) ([a-zA-Z]*)', line_match[1])
 				if match:
 					value = int(match[1])
-					trait = next(key for key, value in trait_strings.items() if value == match[2])
+					trait = string_to_trait[match[2]]
 					traits[trait] = value
 					continue
-				match = re.search('action (.*)', line_match[1])
+				match = re.search('skill (.*)', line_match[1])
 				if match:
-					action_name = match[1]
-					schematic = game.action_db.get_schematic_by_name(action_name)
-					action_schematics.append(schematic)
+					skill_name = match[1]
+					global game
+					skill_schematics.append(game.skill_db.get_schematic_by_name(name=skill_name))
 					continue
 
 		# Generate unit schematic
@@ -687,28 +588,29 @@ class UnitSchematic:
 					traits=traits,
 					idle_animation=idle_animation,
 					hover_idle_animation=hover_idle_animation)
-		new.action_schematics = action_schematics
-		# Just fill the action_animations list with our idle animations.
+		for i,s in enumerate(skill_schematics):
+			new.skill_schematics[i] = s
+		# Just fill the skill_animations list with our idle animations.
 		# They'll be replaced later when the animations are read from
 		# data files
-		new.action_animations = [idle_animation]*len(action_schematics)
+		new.skill_animations = [idle_animation]*c.skill_slots
 
 		return new
 	def generate_unit(self, team, slot):
 		return Unit(schematic=self, team=team, slot=slot)
-	# def set_animation(self, action_index, animation):
-	# 	if action_index > len(self.action_animations)-1:
+	# def set_animation(self, skill_index, animation):
+	# 	if skill_index > len(self.skill_animations)-1:
 	# 		return
 
-	# 	self.action_animations[action_index] = animation
+	# 	self.skill_animations[skill_index] = animation
 	def serialize(self):
 		s = ""
 		s += "name is {}\n".format(self.name)
 		for trait, value in self.max_traits.items():
 			if value == 0: continue
 			s += "\thas {} {}\n".format(value, trait_strings[trait])
-		for action in self.actions:
-			s += "\thas action {}\n".format(action.name)
+		for skill in self.skills:
+			s += "\thas skill {}\n".format(skill.name)
 
 		return s
 class Unit:
@@ -721,37 +623,88 @@ class Unit:
 		self.cur_traits = copy(schematic.traits)
 		self.idle_animation = deepcopy(schematic.idle_animation)
 		self.hover_idle_animation = deepcopy(schematic.hover_idle_animation)
-		self.actions = [schematic.generate_action(owner=self) for schematic in schematic.action_schematics]
-		self.action_animations = deepcopy(schematic.action_animations)#deepcopy(schematic.action_animations) # Concurrent array to self.actions
 
-		for action in self.actions:
-			action.owner = self
-		self.action_buttons = [ActionButton(pos=Vec(x=get_slot_x_pos(team=self.team, slot=self.slot),
-													y=get_team_ui_padding(team=self.team, index=3) + i*action_button_size.y),
-												linked_action=action) for i, action in enumerate(self.actions)]
+		self.skills = [None]*c.skill_slots
+		for i,s in enumerate(schematic.skill_schematics):
+			if s == None:
+				self.skills[i] = None
+			else:
+				self.skills[i] = s.generate_skill(owner=self)
 
-		self.action_points = 1
-		self.current_action_index = None
-		self.current_action_targets = None
+		self.skill_animations = deepcopy(schematic.skill_animations)
+
+		for skill in self.skills:
+			if skill != None:
+				skill.owner = self
+
+		non_empty_skills = [e for e in self.skills if e != None] # We only want to generate buttons for non-empty skills
+		self.skill_buttons = [SkillButton(pos=Vec(x=get_slot_x_pos(team=self.team, slot=self.slot),
+													y=get_team_ui_padding(team=self.team, index=3) + i*skill_button_size.y),
+												linked_skill=skill) for i, skill in enumerate(non_empty_skills)]
+
+		self.skill_points = 1
+		self.current_skill_index = None
+		self.current_skill_targets = None
+	@property
+	def max_vigor(self):
+		return self.max_traits[T.Vigor]
+	@property
+	def max_armor(self):
+		return self.max_traits[T.Armor]
+	@property
+	def max_focus(self):
+		return self.max_traits[T.Focus]
+
+	@property
+	def vigor(self):
+		return self.cur_traits[T.Vigor]
+	@property
+	def armor(self):
+		return self.cur_traits[T.Armor]
+	@property
+	def focus(self):
+		return self.cur_traits[T.Focus]
+	@vigor.setter
+	def vigor(self, new_value):
+		self.cur_traits[T.Vigor] = min(self.max_vigor, new_value)
+
+		if self.vigor <= 0:
+			# Vigor break (death)
+			pass
+	@armor.setter
+	def armor(self, armor):
+		self.cur_traits[T.Armor] = min(self.max_armor, new_value)
+
+		if self.armor <= 0:
+			# Armor break
+			pass
+	@focus.setter
+	def focus(self, focus):
+		self.cur_traits[T.Focus] = min(self.max_focus, new_value)
+
+		if self.focus <= 0:
+			# Focus break
+			pass
+
 	@property
 	def current_animation(self):
-		if self.current_action_index is None:
+		if self.current_skill_index is None:
 			return self.idle_animation
 		else:
-			if len(self.action_animations) != 0:
-				return self.action_animations[self.current_action_index]
+			if len(self.skill_animations) != 0:
+				return self.skill_animations[self.current_skill_index]
 			else:
 				return self.idle_animation
 	@property
-	def action_finished(self):
-		if self.current_action_index == None or self.alive == False:
+	def skill_finished(self):
+		if self.current_skill_index == None or self.alive == False:
 			return True
 		else:
 			return False
 	@property
-	def current_action(self):
-		if self.current_action_index != None:
-			return self.actions[self.current_action_index]
+	def current_skill(self):
+		if self.current_skill_index != None:
+			return self.skills[self.current_skill_index]
 		else:
 			return None
 	@property
@@ -759,74 +712,69 @@ class Unit:
 		rect = self.current_animation.rect
 		rect.pos += get_sprite_slot_pos(slot=self.slot, team=self.team)
 		return rect
-	def start_action(self, action, targeted, valid_targets):
+	def start_skill(self, skill, targeted, valid_targets):
 		if self.alive:
-			self.current_action_index = next(i for i,a in enumerate(self.actions) if a==action)
+			self.current_skill_index = next(i for i,a in enumerate(self.skills) if a==skill)
 			targets = valid_targets
-			if action.target_set is TargetSet.SingleAlly:
+			if skill.target_set is TargetSet.SingleAlly:
 				targets = [targeted]
-			elif action.target_set == TargetSet.Self and targeted == self:
+			elif skill.target_set == TargetSet.Self and targeted == self:
 				targets = [self]
-			elif action.target_set is TargetSet.SingleEnemy:
+			elif skill.target_set is TargetSet.SingleEnemy:
 				targets = [targeted]
 
-			self.current_action_targets = targets
-			self.current_action.execute(kwargs={'source': self,
+			self.current_skill_targets = targets
+			self.current_skill.execute(kwargs={'source': self,
 												'targets': targets})
-			self.action_points -= 1
-	def start_random_action(self, allies, enemies):
+			self.skill_points -= 1
+	def start_random_skill(self, allies, enemies):
 		if self.alive:
-			possible_actions_indices = [] # Actions which have their pre-reqs fulfilled
-			# Check each of our actions, and add them to the list of possible random actions
-			for i,action in enumerate(self.actions):
-				if action.usable:
+			possible_skills_indices = [i for i,a in enumerate(self.skills) if a != None and a.usable == True] # Skills which have their pre-reqs fulfilled
+			# Check each of our skills, and add them to the list of possible random skills
 
-					possible_actions_indices.append(i)
-
-			if len(possible_actions_indices) == 0:
-				# We have no valid actions. Return and do nothing.
+			if len(possible_skills_indices) == 0:
 				return
 
-			self.current_action_index = random.choice(possible_actions_indices)
-			self.current_action_targets = []
+			self.current_skill_index = random.choice(possible_skills_indices)
+			self.current_skill_targets = []
 
-			action = self.actions[self.current_action_index]
-			if action.target_set == TargetSet.Self:
-				self.current_action_targets = [self]
-			elif action.target_set == TargetSet.SingleAlly:
+			skill = self.skills[self.current_skill_index]
+			if skill.target_set == TargetSet.Self:
+				self.current_skill_targets = [self]
+			elif skill.target_set == TargetSet.SingleAlly:
 				non_dead_allies = [e for e in allies if e.alive == True]
 				if len(non_dead_allies) > 0:
-					self.current_action_targets = [random.choice(non_dead_allies)]
-			elif action.target_set == TargetSet.OtherAlly:
+					self.current_skill_targets = [random.choice(non_dead_allies)]
+			elif skill.target_set == TargetSet.OtherAlly:
 				non_self_non_dead_allies = [e for e in allies if e != self and e.alive == True]
 				if len(non_self_non_dead_allies) > 0:
-					self.current_action_targets = [random.choice(non_self_non_dead_allies)]
-			elif action.target_set == TargetSet.AllAllies:
+					self.current_skill_targets = [random.choice(non_self_non_dead_allies)]
+			elif skill.target_set == TargetSet.AllAllies:
 				non_dead_allies = [e for e in allies if e.alive == True]
 				if len(non_dead_allies) > 0:
-					self.current_action_targets = non_dead_allies
-			elif action.target_set == TargetSet.SingleEnemy:
+					self.current_skill_targets = non_dead_allies
+			elif skill.target_set == TargetSet.SingleEnemy:
 				if len(enemies) > 0:
-					self.current_action_targets = [random.choice(enemies)]
-			elif action.target_set == TargetSet.AllEnemies:
+					self.current_skill_targets = [random.choice(enemies)]
+			elif skill.target_set == TargetSet.AllEnemies:
 				if len(enemies) > 0:
-					self.current_action_targets = enemies
+					self.current_skill_targets = enemies
 
-			if self.current_action_index != None and self.current_action_targets != None:
+			if self.current_skill_index != None and self.current_skill_targets != None:
 				self.current_animation.restart()
 
-			self.actions[self.current_action_index].execute(kwargs={'source': self,
-																	'targets':self.current_action_targets})
+			self.skills[self.current_skill_index].execute(kwargs={'source': self,
+																	'targets':self.current_skill_targets})
 
 	def update(self, frame_count=1):
-		if self.current_action_index is not None:
+		if self.current_skill_index is not None:
 			self.current_animation.update(frame_count)
 
 			# Switch back to animation-less sprite once animation is finished
 			if self.current_animation.finished is True:
-				self.current_action_index = None
-				self.current_action_targets = None
-	def draw(self, target, mouse_pos, preview_action=None):
+				self.current_skill_index = None
+				self.current_skill_targets = None
+	def draw(self, target, mouse_pos, preview_skill=None):
 		if self.check_hover(mouse_pos=mouse_pos) == True:
 			hover = True
 		else:
@@ -839,13 +787,13 @@ class Unit:
 			for trait, max_value in self.max_traits.items():
 				cur_trait = self.cur_traits[trait]
 				preview_damage = 0
-				if preview_action is not None:
-					if trait == T.Vigor and preview_action.damages[T.Vigor] > 0:
-						# Account for armor in preview damage
-						armor = self.cur_traits[T.Armor]
-						preview_damage = max(1, preview_action.damages[trait] - armor)
-					else:
-						preview_damage = preview_action.damages[trait]
+				# if preview_skill is not None:
+				# 	if trait == T.Vigor and preview_skill.damages[T.Vigor] > 0:
+				# 		# Account for armor in preview damage
+				# 		armor = self.cur_traits[T.Armor]
+				# 		preview_damage = max(1, preview_skill.damages[trait] - armor)
+				# 	else:
+				# 		preview_damage = preview_skill.damages[trait]
 
 				# Draws trait bars
 				draw_healthbar(	game=game,
@@ -865,10 +813,10 @@ class Unit:
 				self.current_animation.draw(game=game,
 											pos=Vec(x_pos, get_team_ui_padding(team=self.team, index=2)))
 
-			# Draws action buttons
-			for button in self.action_buttons:
-				#if button.linked_action == self.current_action:
-				if button.linked_action == preview_action:
+			# Draws skill buttons
+			for button in self.skill_buttons:
+				#if button.linked_skill == self.current_skill:
+				if button.linked_skill == preview_skill:
 					force_highlight = True
 				else:
 					force_highlight = False
@@ -931,23 +879,24 @@ class UnitSchematicDatabase:
 		with open(animation_data) as f:
 			in_schematic = False
 			unit_index = None
-			action_index = None
+			skill_index = None
 			string = ""
 			while line:
 				match = re.search('^([a-zA-Z]*)\'s (.*)', line.rstrip())
 				if match:
 					if unit_index == None:
 						# This is the beginning of an animation
+						print(self.schematics)
 						unit_index, unit_schematic = next((i,s) for i,s in enumerate(self.schematics) if s.name == match[1])
-						action_index = next(i for i,a in enumerate(unit_schematic.action_schematics) if a.name == match[2])
+						skill_index = next(i for i,s in enumerate(unit_schematic.skill_schematics) if s.name == match[2])
 						string += line
 					else:
 						# This is the beginning of an animation, and
 						# we've reached the end of the previous animation string
 						anim = Animation.from_string(string)
-						self.schematics[unit_index].action_animations[action_index] = anim
+						self.schematics[unit_index].skill_animations[skill_index] = anim
 						unit_index, unit_schematic = next((i,s) for i,s in enumerate(self.schematics) if s.name == match[1])
-						action_index = next(i for i,a in enumerate(unit_schematic.action_schematics) if a.name == match[2])
+						skill_index = next(i for i,s in enumerate(unit_schematic.skill_schematics) if s.name == match[2])
 						string = line
 				else:
 					string += line
@@ -957,33 +906,36 @@ class UnitSchematicDatabase:
 			if string:
 				# If there's still an animation, add it
 				anim = Animation.from_string(string)
-				self.schematics[unit_index].action_animations[action_index] = anim
+				self.schematics[unit_index].skill_animations[skill_index] = anim
 
 
 	def get_list_of_schematic_names(self):
 		return [s.name for s in self.schematics]
 	def get_schematic_by_name(self, name):
-		return next(s for s in self.schematics if s.name == name)
+		try:
+			return next(s for s in self.schematics if s.name == name)
+		except StopIteration:
+			return None
 	def generate_unit(self, name, team, slot):
 		schematic = next(s for s in self.schematics if s.name == name)
 		return schematic.generate_unit(team=team, slot=slot)
 
-action_button_size =  Vec(150,60)
-action_info_size = Vec(200,70)
-class ActionButton:
-	def __init__(self, pos, linked_action):
+skill_button_size =  Vec(150,60)
+skill_info_size = Vec(200,70)
+class SkillButton:
+	def __init__(self, pos, linked_skill):
 		self.pos = pos
-		self.size = action_button_size
-		self.linked_action = linked_action
+		self.size = skill_button_size
+		self.linked_skill = linked_skill
 
 		self.surface = None
 		self.hover_surface = None
-		self.unable_surface = None # Surface if action requirements aren't mean
+		self.unable_surface = None # Surface if skill requirements aren't mean
 		self.info_box_surface = None
 		self.refresh_surfaces()
 	@property
 	def owner(self):
-		return self.linked_action.owner
+		return self.linked_skill.owner
 	def refresh_surfaces(self):
 		# Non-hovered surface
 		back_color = c.dkgrey
@@ -996,11 +948,11 @@ class ActionButton:
 		draw_rect(target=self.surface, color=back_color, pos=Vec(0,0), size=self.size, width=0)
 		draw_rect(target=self.surface, color=border_color, pos=Vec(0,0), size=self.size, width=1)
 
-		# Action name text
-		prev_line = draw_text(	target=self.surface, color=text_color, pos=Vec(action_button_size.x/2, 0),
-								text=self.linked_action.name, x_center=True, y_center=False, font=main_font_5_u)
+		# Skill name text
+		prev_line = draw_text(	target=self.surface, color=text_color, pos=Vec(skill_button_size.x/2, 0),
+								text=self.linked_skill.name, x_center=True, y_center=False, font=main_font_5_u)
 		prev = prev_line
-		for trait, required in self.linked_action.required.items():
+		for trait, required in self.linked_skill.required.items():
 			if required != 0:
 				pass
 				#s = require_surfaces[trait]
@@ -1012,18 +964,18 @@ class ActionButton:
 				# 			text=str(required), x_center=True, y_center=True, font=main_font_10)
 
 				# X out the trait if the owner doesn't fulfill that requirement
-				# if(self.linked_action.owner.cur_traits[trait] < required):
+				# if(self.linked_skill.owner.cur_traits[trait] < required):
 				# 	draw_x(target=self.surface, color=c.grey, rect=prev)
 
 		# Target set text
-		# prev = draw_text(	target=self.surface, color=text_color, pos=prev_line.bottom_left, text=target_set_strings[self.linked_action.target_set],
+		# prev = draw_text(	target=self.surface, color=text_color, pos=prev_line.bottom_left, text=target_set_to_string[self.linked_skill.target_set],
 		# 					x_center=False, y_center=False, font=main_font_4)
 
-		# Trait sword icons and overlay'd damage text for the action
-		for trait, damage in self.linked_action.damages.items():
-			if damage != 0:
-				prev = draw_surface(target=self.surface, pos=prev.center_bottom, surface=sword_surfaces[trait], x_align=AlignX.Center)
-				draw_text(target=self.surface, color=c.white, pos=prev.center, text=str(self.linked_action.damages[trait]), font=main_font_7)
+		# Trait sword icons and overlay'd damage text for the skill
+		# for trait, damage in self.linked_skill.damages.items():
+		# 	if damage != 0:
+		# 		prev = draw_surface(target=self.surface, pos=prev.center_bottom, surface=sword_surfaces[trait], x_align=AlignX.Center)
+		# 		draw_text(target=self.surface, color=c.white, pos=prev.center, text=str(self.linked_skill.damages[trait]), font=main_font_7)
 
 		# Hovered surface
 		hover_back_color = c.ltgrey
@@ -1036,11 +988,11 @@ class ActionButton:
 		draw_rect(target=self.hover_surface, color=hover_back_color, pos=Vec(0,0), size=self.size, width=0)
 		draw_rect(target=self.hover_surface, color=hover_border_color, pos=Vec(0,0), size=self.size, width=1)
 
-		# Action name text
-		prev_line = draw_text(	target=self.hover_surface, color=hover_text_color, pos=Vec(action_button_size.x/2, 0),
-								text=self.linked_action.name, x_center=True, y_center=False, font=main_font_5_u)
+		# Skill name text
+		prev_line = draw_text(	target=self.hover_surface, color=hover_text_color, pos=Vec(skill_button_size.x/2, 0),
+								text=self.linked_skill.name, x_center=True, y_center=False, font=main_font_5_u)
 		prev = prev_line
-		for trait, required in self.linked_action.required.items():
+		for trait, required in self.linked_skill.required.items():
 			if required != 0:
 				pass
 				#s = require_surfaces[trait]
@@ -1052,39 +1004,41 @@ class ActionButton:
 				# 			text=str(required), x_center=True, y_center=True, font=main_font_10)
 
 				# X out the trait if the owner doesn't fulfill that requirement
-				# if(self.linked_action.owner.cur_traits[trait] < required):
+				# if(self.linked_skill.owner.cur_traits[trait] < required):
 				# 	draw_x(target=self.hover_surface, color=hover_c.grey, rect=prev)
 
+		# FIX
 		# Target set text
-		# prev = draw_text(	target=self.hover_surface, color=hover_text_color, pos=prev_line.bottom_left, text=target_set_strings[self.linked_action.target_set],
+		# prev = draw_text(	target=self.hover_surface, color=hover_text_color, pos=prev_line.bottom_left, text=target_set_to_string[self.linked_skill.target_set],
 		# 					x_center=False, y_center=False, font=main_font_4)
 
-		# Trait sword icons and overlay'd damage text for the action
-		for trait, damage in self.linked_action.damages.items():
-			if damage != 0:
-				prev = draw_surface(target=self.hover_surface, pos=prev.center_bottom, surface=sword_surfaces[trait], x_align=AlignX.Center)
-				draw_text(target=self.hover_surface, color=c.white, pos=prev.center, text=str(self.linked_action.damages[trait]), font=main_font_7)
+		# FIX
+		# Trait sword icons and overlay'd damage text for the skill
+		# for trait, damage in self.linked_skill.damages.items():
+		# 	if damage != 0:
+		# 		prev = draw_surface(target=self.hover_surface, pos=prev.center_bottom, surface=sword_surfaces[trait], x_align=AlignX.Center)
+		# 		draw_text(target=self.hover_surface, color=c.white, pos=prev.center, text=str(self.linked_skill.damages[trait]), font=main_font_7)
 
 		# Info box surface
-		self.info_box_surface = Surface(action_info_size)
+		self.info_box_surface = Surface(skill_info_size)
 
 		# Background box and border
-		draw_rect(target=self.info_box_surface, color=[50]*3, pos=Vec(0,0), size=action_info_size, width=0)
-		draw_rect(target=self.info_box_surface, color=c.white, pos=Vec(0,0), size=action_info_size, width=1)
-		prev=draw_text(	target=self.info_box_surface, color=c.white, pos=Vec(action_info_size.x/2, 0),
-						text=self.linked_action.name, font=main_font_5_u, x_center=True, y_center=False)
+		draw_rect(target=self.info_box_surface, color=[50]*3, pos=Vec(0,0), size=skill_info_size, width=0)
+		draw_rect(target=self.info_box_surface, color=c.white, pos=Vec(0,0), size=skill_info_size, width=1)
+		prev=draw_text(	target=self.info_box_surface, color=c.white, pos=Vec(skill_info_size.x/2, 0),
+						text=self.linked_skill.name, font=main_font_5_u, x_center=True, y_center=False)
 		#target, text, pos, font, color=c.white, word_wrap_width=None):
-		prev=draw_text_wrapped(	target=self.info_box_surface, color=c.white, pos=Vec(action_info_size.x*0.1, prev.bottom),
-								text=self.linked_action.description, font=main_font_4, word_wrap_width=action_info_size.x*0.9)
+		# prev=draw_text_wrapped(	target=self.info_box_surface, color=c.white, pos=Vec(skill_info_size.x*0.1, prev.bottom),
+		# 						text=self.linked_skill.description, font=main_font_4, word_wrap_width=skill_info_size.x*0.9)
 
 		# Unable Surface
 		self.unable_surface = copy(self.surface)
-		draw_x(target=self.unable_surface, color=c.red, rect=Rect(pos=Vec(0,0), size=action_button_size))
+		draw_x(target=self.unable_surface, color=c.red, rect=Rect(pos=Vec(0,0), size=skill_button_size))
 
 	def draw_info_box(self, mouse_pos):
 		game.queue_surface(surface=self.info_box_surface, depth=10, pos=mouse_pos)
 	def draw(self, game, mouse_pos, force_highlight=False):
-		if self.linked_action.usable == False:
+		if self.linked_skill.usable == False:
 			game.queue_surface(depth=20, surface=self.unable_surface, pos=self.pos)
 		elif self.check_hover(mouse_pos=mouse_pos) == True or force_highlight == True:
 			game.queue_surface(depth=20, surface=self.hover_surface, pos=self.pos)
@@ -1111,16 +1065,16 @@ class ActionButton:
 		return Rect(self.pos, self.size)
 
 	def __deepcopy__(self, memo):
-		# TODO: Should action buttons ever really be copy'd or deepcopy'd? Almost everything
+		# TODO: Should skill buttons ever really be copy'd or deepcopy'd? Almost everything
 		# 		has to be changed anyway.
 		# self.pos = pos
-		# self.size = action_button_size
-		# self.linked_action = linked_action
+		# self.size = skill_button_size
+		# self.linked_skill = linked_skill
 		# self.surface = None
 		# self.hover_surface = None
 		# self.refresh_surfaces()
-		other = ActionButton(	pos=self.pos,
-								linked_action=self.linked_action)
+		other = SkillButton(	pos=self.pos,
+								linked_skill=self.linked_skill)
 
 
 
@@ -1134,11 +1088,11 @@ class Turn:
 			# Switch from player's turn to enemy's turn
 			self.player_active = False
 			self.current_enemy = 0
-			enemies[self.current_enemy].start_random_action(allies=enemies, enemies=friendlies) # Opposite from perspective of enemies
+			enemies[self.current_enemy].start_random_skill(allies=enemies, enemies=friendlies) # Opposite from perspective of enemies
 		else:
 			# Switch back from enemy's turn to player's turn
 			for friendly in friendlies:
-				friendly.action_points = 1
+				friendly.skill_points = 1
 			self.player_active = True
 			self.current_enemy = None
 
@@ -1146,13 +1100,13 @@ class Turn:
 		# If enemy is no longer animating, move on to the next enemy.
 		# If last enemy is finished, turn goes back to player
 		if self.current_enemy != None and self.player_active == False:
-			if enemies[self.current_enemy].action_finished:
+			if enemies[self.current_enemy].skill_finished:
 				self.current_enemy += 1
 
 				if(self.current_enemy >= len(enemies)):
 					self.end_turn(friendlies=friendlies, enemies=enemies)
 				else:
-					enemies[self.current_enemy].start_random_action(allies=enemies, enemies=friendlies)
+					enemies[self.current_enemy].start_random_skill(allies=enemies, enemies=friendlies)
 		if self.current_enemy == None and self.player_active == False:
 			self.end_turn(friendlies=friendlies, enemies=enemies)
 
@@ -1185,24 +1139,24 @@ def slot_intersect(pos, team, slot):
 		return enemy_slot_intersect(pos=pos, slot=slot)
 
 
-def friendly_is_valid_target(action, target):
-	if action.target_set == TargetSet.All:
+def friendly_is_valid_target(skill, target):
+	if skill.target_set == TargetSet.All:
 		return True
-	if action.target_set == TargetSet.SingleAlly:
+	if skill.target_set == TargetSet.SingleAlly:
 		return True
-	if action.target_set == TargetSet.AllAllies:
+	if skill.target_set == TargetSet.AllAllies:
 		return True
-	if action.target_set == TargetSet.Self and action.owner == target:
+	if skill.target_set == TargetSet.Self and skill.owner == target:
 		return True
 
 	return False
 
-def enemy_is_valid_target(action, target):
-	if action.target_set == TargetSet.All:
+def enemy_is_valid_target(skill, target):
+	if skill.target_set == TargetSet.All:
 		return True
-	if action.target_set == TargetSet.SingleEnemy:
+	if skill.target_set == TargetSet.SingleEnemy:
 		return True
-	if action.target_set == TargetSet.AllEnemies:
+	if skill.target_set == TargetSet.AllEnemies:
 		return True
 
 	return False
@@ -1702,6 +1656,8 @@ class Dropdown:
 				self.open = not self.open
 			else:
 				self.open = False
+		if game.input.pressed(button=2):
+			self.open = False
 
 
 class ListView:
@@ -1782,7 +1738,10 @@ class EditorState:
 
 		self.focused_index = None # Index of UI element currently focused
 
-		# ListView of editable types (e.g., Unit, Action, Battle)
+		# Schematic that's currently available for editing in right pane
+		self.loaded_schematic = None
+
+		# ListView of editable types (e.g., Unit, Skill, Battle)
 		self.editable_type_listview = ListView(	pos=Vec(20,0),
 												size=Vec(100, 150),
 												entry_height=50,
@@ -1801,7 +1760,7 @@ class EditorState:
 		# Individual properties UI layout for each editable type
 		self.property_ui_elements = {
 			EditableType.Unit: [],
-			EditableType.Action: [],
+			EditableType.Skill: [],
 			EditableType.Battle: []
 		}
 		property_ui_origin = Vec(500,50)
@@ -1817,11 +1776,12 @@ class EditorState:
 		# Set up surfaces for text labels of property UI elements
 		self.property_label_text_surfaces = {
 			EditableType.Unit: 	 [None] * len(c.unit_ui_indices),
-			EditableType.Action: [None] * len(c.action_ui_indices),
+			EditableType.Skill: [None] * len(c.skill_ui_indices),
 			EditableType.Battle: [None] * len(c.battle_ui_indices)
 		}
 		for editable_type, text_surfaces in self.property_label_text_surfaces.items():
 			for property_string, i in c.ui_indices[editable_type].items():
+				print(property_string, i, editable_type)
 				text_surfaces[i] = Surface.from_pgsurface(main_font_7.render(property_string, True, c.grey))
 
 		self.save_button = Button(	pos=Vec(screen_width-120, screen_height-70),
@@ -1829,19 +1789,36 @@ class EditorState:
 									text="Save",
 									function=self.save)
 
+		self.test_battle_button = Button(	pos=Vec(screen_width/2, screen_height-140),
+											size=Vec(200,100),
+											text="Save & Test Battle",
+											function=self.start_test_battle)
+
 		self.dropdowns = {
-			EditableType.Unit: 	 [None] * 4,
-			EditableType.Action: [None] * 0,
-			EditableType.Battle: [None] * 0
+			EditableType.Unit: 	 [None] * len(c.unit_ui_dropdowns),
+			EditableType.Skill: [None] * len(c.skill_ui_dropdowns),
+			EditableType.Battle: [None] * len(c.battle_ui_dropdowns)
 		}
 
 		global game
 		for editable_type, dropdown_group in self.dropdowns.items():
-			for i, pos in enumerate(c.ui_dropdowns[editable_type]):
-				dropdown_group[i] = Dropdown(	pos=pos,
+			if editable_type == EditableType.Unit:
+				for i, pos in enumerate(c.unit_ui_dropdowns):
+					dropdown_group[i] = Dropdown(	pos=pos,
+													size=Vec(200,40),
+													entries=[''] + game.skill_db.get_list_of_schematic_names(),
+													default=0)
+			elif editable_type == EditableType.Skill:
+				dropdown_group[0] = Dropdown(	pos=c.skill_ui_dropdowns[0],
 												size=Vec(200,40),
-												entries=[''] + game.action_db.get_list_of_schematic_names(),
+												entries=[s for k,s in target_set_to_string.items()],
 												default=0)
+			elif editable_type == EditableType.Battle:
+				for i, pos in enumerate(c.battle_ui_dropdowns):
+					dropdown_group[i] = Dropdown(	pos=pos,
+													size=Vec(200,40),
+													entries=[''] + game.unit_db.get_list_of_schematic_names(),
+													default=0)
 
 
 
@@ -1851,27 +1828,58 @@ class EditorState:
 		pass
 	def exit(self):
 		pass
-	def save(self):
-		name = self.entry_listview.selected_entry
+	def start_test_battle(self):
+		self.save()
+		global game
+		friendlies = [None]*4
+		enemies = [None]*4
+		for i,s in enumerate(self.loaded_schematic.friendlies):
+			if s != None:
+				friendlies[i] = s.generate_unit(team=0, slot=i)
+		for i,s in enumerate(self.loaded_schematic.enemies):
+			if s != None:
+				enemies[i] = s.generate_unit(team=1, slot=i)
 
+		game.enter_state(BattleState(friendly_units=friendlies, enemy_units=enemies))
+
+	def save(self):
 		global game
 		if self.active_editable_type == EditableType.Unit:
-			schematic = game.unit_db.get_schematic_by_name(name)
-
+			# Save new text/number values into the loaded schematic
+			schematic = self.loaded_schematic
 			schematic.name = self.active_property_ui_group[c.unit_ui_indices['name']].text
 			schematic.description = self.active_property_ui_group[c.unit_ui_indices['description']].text
 			schematic.traits[T.Vigor] = int(self.active_property_ui_group[c.unit_ui_indices['vigor']].text)
 			schematic.traits[T.Armor] = int(self.active_property_ui_group[c.unit_ui_indices['armor']].text)
 			schematic.traits[T.Focus] = int(self.active_property_ui_group[c.unit_ui_indices['focus']].text)
 
+			# Save new skills (dropdown menus) into the loaded unit schematic
 			for i, dropdown in enumerate(self.dropdowns[EditableType.Unit]):
-				#print(game.action_db.get_schematic_by_name(name=dropdown.selected_entry).name)
 				if dropdown.selected_entry != '':
-					schematic.action_schematics[i] = game.action_db.get_schematic_by_name(name=dropdown.selected_entry)
-		elif self.active_editable_type == EditableType.Action:
-			pass
+					schematic.skill_schematics[i] = game.skill_db.get_schematic_by_name(name=dropdown.selected_entry)
+				else:
+					schematic.skill_schematics[i] = None
+		elif self.active_editable_type == EditableType.Skill:
+			schematic = self.loaded_schematic
+
+			# Save values from textboxes
+			schematic.name = self.active_property_ui_group[c.skill_ui_indices['name']].text
+			schematic.required[T.Vigor] = int(self.active_property_ui_group[c.skill_ui_indices['vigor requirement']].text)
+			schematic.required[T.Armor] = int(self.active_property_ui_group[c.skill_ui_indices['armor requirement']].text)
+			schematic.required[T.Focus] = int(self.active_property_ui_group[c.skill_ui_indices['focus requirement']].text)
+
+			# Save values from dropdowns
+			target_set_string = self.dropdowns[EditableType.Skill][0].selected_entry
 		elif self.active_editable_type == EditableType.Battle:
-			pass
+			schematic = self.loaded_schematic
+
+			# Save unit schematics from dropdowns
+			for i,d in enumerate(self.dropdowns[EditableType.Battle][:4]):
+				self.loaded_schematic.friendlies[i] = game.unit_db.get_schematic_by_name(d.selected_entry)
+			for i,d in enumerate(self.dropdowns[EditableType.Battle][4:8]):
+				self.loaded_schematic.enemies[i] = game.unit_db.get_schematic_by_name(d.selected_entry)
+
+		self._refresh_editable_listviews()
 
 	def _refresh_editable_listviews(self):
 		selected_index = self.editable_type_listview.selected_index
@@ -1879,8 +1887,8 @@ class EditorState:
 			# Unit
 			self.entry_listview.entries = game.unit_db.get_list_of_schematic_names()
 		if selected_index == 1:
-			# Action
-			self.entry_listview.entries = game.action_db.get_list_of_schematic_names()
+			# Skill
+			self.entry_listview.entries = game.skill_db.get_list_of_schematic_names()
 		if selected_index == 2:
 			# Battle
 			self.entry_listview.entries = [str(i) for i,_ in enumerate(game.battle_db.battles)]
@@ -1897,12 +1905,9 @@ class EditorState:
 			return []
 
 	def update(self, game):
-		for e in self.dropdowns[self.active_editable_type]:
-			if e != None:
-				e.update(game=game)
-
 		if self.editable_type_listview.update(game=game):
-			# Editable TYPE was chosen [e.g., unit/action/battle]
+			# Editable TYPE was chosen [e.g., unit/skill/battle]
+			self.loaded_schematic = None
 			self.entry_listview.selected_index = None
 			self._refresh_editable_listviews()
 			for e in self.active_property_ui_group:
@@ -1911,39 +1916,55 @@ class EditorState:
 		if self.entry_listview.update(game=game):
 			# A new unit was chosen [e.g., Warrior/Rogue/Wolf]
 			if self.active_editable_type == EditableType.Unit:
-				selected = game.unit_db.get_schematic_by_name(self.entry_listview.selected_entry)
-				self.active_property_ui_group[c.unit_ui_indices['name']].text = selected.name
-				self.active_property_ui_group[c.unit_ui_indices['description']].text = selected.description
-				self.active_property_ui_group[c.unit_ui_indices['vigor']].text = str(selected.traits[T.Vigor])
-				self.active_property_ui_group[c.unit_ui_indices['armor']].text = str(selected.traits[T.Armor])
-				self.active_property_ui_group[c.unit_ui_indices['focus']].text = str(selected.traits[T.Focus])
+				self.loaded_schematic = game.unit_db.get_schematic_by_name(self.entry_listview.selected_entry)
+				self.active_property_ui_group[c.unit_ui_indices['name']].text = self.loaded_schematic.name
+				self.active_property_ui_group[c.unit_ui_indices['description']].text = self.loaded_schematic.description
+				self.active_property_ui_group[c.unit_ui_indices['vigor']].text = str(self.loaded_schematic.traits[T.Vigor])
+				self.active_property_ui_group[c.unit_ui_indices['armor']].text = str(self.loaded_schematic.traits[T.Armor])
+				self.active_property_ui_group[c.unit_ui_indices['focus']].text = str(self.loaded_schematic.traits[T.Focus])
 
-				for d in self.dropdowns[self.active_editable_type]:
+				for d in self.dropdowns[EditableType.Unit]:
 					d.selected_index = None
 
-				for i, s in enumerate(selected.action_schematics):
-					dropdown = self.dropdowns[self.active_editable_type][i]
-					dropdown.select_entry_by_name(name=s.name)
-			if self.active_editable_type == EditableType.Action:
-				selected = game.action_db.get_schematic_by_name(self.entry_listview.selected_entry)
-				self.active_property_ui_group[c.action_ui_indices['name']].text = selected.name
-				self.active_property_ui_group[c.action_ui_indices['description']].text = selected.description
-				self.active_property_ui_group[c.action_ui_indices['target set']].text = target_set_strings[selected.target_set]
-				self.active_property_ui_group[c.action_ui_indices['vigor requirement']].text = str(selected.required[T.Vigor])
-				self.active_property_ui_group[c.action_ui_indices['armor requirement']].text = str(selected.required[T.Armor])
-				self.active_property_ui_group[c.action_ui_indices['focus requirement']].text = str(selected.required[T.Focus])
-				self.active_property_ui_group[c.action_ui_indices['vigor damage']].text = str(selected.damages[T.Vigor])
-				self.active_property_ui_group[c.action_ui_indices['armor damage']].text = str(selected.damages[T.Armor])
-				self.active_property_ui_group[c.action_ui_indices['focus damage']].text = str(selected.damages[T.Focus])
+				for i, schematic in enumerate(self.loaded_schematic.skill_schematics):
+					dropdown = self.dropdowns[EditableType.Unit][i]
+					dropdown.entries = [''] + game.skill_db.get_list_of_schematic_names()
+					if schematic != None:
+						dropdown.select_entry_by_name(name=schematic.name)
+					else:
+						dropdown.select_entry_by_name(name='')
+
+			if self.active_editable_type == EditableType.Skill:
+				self.loaded_schematic = game.skill_db.get_schematic_by_name(self.entry_listview.selected_entry)
+				self.active_property_ui_group[c.skill_ui_indices['name']].text = self.loaded_schematic.name
+				self.active_property_ui_group[c.skill_ui_indices['vigor requirement']].text = str(self.loaded_schematic.required[T.Vigor])
+				self.active_property_ui_group[c.skill_ui_indices['armor requirement']].text = str(self.loaded_schematic.required[T.Armor])
+				self.active_property_ui_group[c.skill_ui_indices['focus requirement']].text = str(self.loaded_schematic.required[T.Focus])
 			if self.active_editable_type == EditableType.Battle:
-				pass
+				self.loaded_schematic = game.battle_db.battles[int(self.entry_listview.selected_entry)]
+
+				# print(self.dropdowns[EditableType.Battle])
+				# print(self.dropdowns[EditableType.Battle][:4])
+				# print(self.dropdowns[EditableType.Battle][4:8])
+
+				for i,d in enumerate(self.dropdowns[EditableType.Battle][:4]):
+					d.entries = [''] + game.unit_db.get_list_of_schematic_names()
+					schematic = self.loaded_schematic.friendlies[i]
+					if schematic != None:
+						d.select_entry_by_name(name=schematic.name)
+				for i,d in enumerate(self.dropdowns[EditableType.Battle][4:8]):
+					d.entries = [''] + game.unit_db.get_list_of_schematic_names()
+					schematic = self.loaded_schematic.enemies[i]
+					if schematic != None:
+						d.select_entry_by_name(name=schematic.name)
+
 
 			for e in self.active_property_ui_group:
 				e.reset_focus_state()
 
 			self.focused_index = None
 
-		if self.editable_type_listview.selected_index != None:
+		if self.loaded_schematic != None:
 			for i, e in enumerate(self.active_property_ui_group):
 				new_focus_state = e.update(game=game)
 				if new_focus_state == True:
@@ -1954,14 +1975,21 @@ class EditorState:
 				elif new_focus_state == False:
 					self.focused_index = None
 
-		for i, s in enumerate(self.property_label_text_surfaces[self.active_editable_type]):
-			game.queue_surface(	surface=s,
-								pos=self.active_property_ui_group[i].rect.center_left - Vec(20,0),
-								x_align=AlignX.Right,
-								y_align=AlignY.Center,
-								depth=10)
+			for e in self.dropdowns[self.active_editable_type]:
+				if e != None:
+					e.update(game=game)
 
-		self.save_button.update(game=game)
+			self.save_button.update(game=game)
+
+			if self.active_editable_type == EditableType.Battle:
+				self.test_battle_button.update(game=game)
+
+			for i, s in enumerate(self.property_label_text_surfaces[self.active_editable_type]):
+				game.queue_surface(	surface=s,
+									pos=self.active_property_ui_group[i].rect.center_left - Vec(20,0),
+									x_align=AlignX.Right,
+									y_align=AlignY.Center,
+									depth=10)
 
 		game.queue_drawline(start=Vec(300,0),
 							end=Vec(300,screen_height),
@@ -2029,11 +2057,11 @@ class BattleState:
 		#self.turn = Turn(initial_active=True)
 		self.is_player_turn = True
 		self.active_subturn_slot = 0 # The slot which has the enemy currently doing its own subturn
-		# action_state represents what action the play is currently doing (after clicking a card, it might be "targeting")
-		self.action_state = "Action Select"
+		# skill_state represents what skill the play is currently doing (after clicking a card, it might be "targeting")
+		self.skill_state = "Skill Select"
 		self.target_start_pos = Vec(0,0)
-		#self.selected_action = None
-		self.selected_action_button = None
+		#self.selected_skill = None
+		self.selected_skill_button = None
 
 		# self.friendlies = []
 		# self.enemies = []
@@ -2041,6 +2069,8 @@ class BattleState:
 		# Set up warrior and put in slot 0, usw.
 		self.friendly_slots = friendly_units
 		self.enemy_slots = enemy_units
+
+		self.selected_targets = []
 
 		# warrior_unit = game.unit_db.generate_unit(name="Warrior", team=0, slot=0)
 		# rogue_unit = game.unit_db.generate_unit(name="Rogue", team=0, slot=1)
@@ -2095,78 +2125,94 @@ class BattleState:
 			# and starting ENEMY turn
 			self.is_player_turn = False
 			self.active_subturn_slot = 0
-			self.enemies[self.active_subturn_slot].start_random_action(allies=self.enemies, enemies=self.friendlies)
+			self.enemies[self.active_subturn_slot].start_random_skill(allies=self.enemies, enemies=self.friendlies)
 		else:
 			# Perform cleanup associated with ending ENEMY turn
 			# and starting player turn
 			self.is_player_turn = True
 			for f in self.friendlies:
-				f.action_points = 1
+				f.skill_points = 1
 
 
 
 	def update(self, game):
-
-
 		if self.is_player_turn:
 			# End turn if player presses Q
 			if game.input.pressed(key=pg.K_q):
 				self.end_turn()
-			# End turn if action points are at 0 for all allies
-			if len([e for e in self.friendlies if e.action_points > 0]) == 0:
+			# End turn if skill points are at 0 for all allies
+			if len([e for e in self.friendlies if e.skill_points > 0]) == 0:
 				self.end_turn()
 			# Handle left mouse button press
-			# 	* Select the hovered action if no action is selected
-			# 	* Select the hovered target if an action has already been selected
+			# 	* Select the hovered skill if no skill is selected
+			# 	* Select the hovered target if an skill has already been selected
 			if game.input.pressed(button=0):
-				if self.action_state == "Action Select":
+				if self.skill_state == "Skill Select":
 					for friendly in self.friendlies:
-						if friendly.action_points > 0:
-							for button in friendly.action_buttons:
+						if friendly.skill_points > 0:
+							for button in friendly.skill_buttons:
 								if button.check_hover(mouse_pos=game.mouse_pos) == True:
-									self.action_state = "Target Select"
-									self.selected_action_button = button
+									self.skill_state = "Target Select"
+									self.selected_skill_button = button
 
-				elif self.action_state == "Target Select":
-					action = self.selected_action_button.linked_action
-					owner = self.selected_action_button.linked_action.owner
-					valid_targets = self.get_valid_targets(source_unit=owner, target_set=action.target_set)
-					for target in [e for e in self.friendlies+self.enemies if e in valid_targets]:
+				elif self.skill_state == "Target Select":
+					skill = self.selected_skill_button.linked_skill
+					owner = self.selected_skill_button.linked_skill.owner
+					valid_targets = self.get_valid_targets(source_unit=owner, target_set=skill.target_set)
+
+					for target in valid_targets:
 						if target.alive is False:
 							continue
-
 						if slot_intersect(pos=game.mouse_pos, team=target.team, slot=target.slot):
-							owner.start_action(action=action, targeted=target, valid_targets=valid_targets)
+							if skill.target_set in [TargetSet.Self, TargetSet.SingleAlly, TargetSet.OtherAlly, TargetSet.SingleEnemy]:
+								targets = [targeted]
+							else:
+								targets = valid_targets
 
-					self.action_state = "Action Select"
+							self.selected_targets.append(targets)
+							if len(self.selected_targets) == len(skill.effect_groups):
+								# All targets have been chosen
+								skill.apply_effects(target_groups = self.selected_targets)
+							break
+
+					self.skill_state = "Skill Select"
 
 			# Handle right mouse button press
-			#	* If an action has been selected, deselect it so another one can be selected.
+			#	* If an skill has been selected, deselect it so another one can be selected.
 			if game.input.pressed(button=2):
-				if self.action_state == "Target Select":
-					self.action_state = "Action Select"
+				if self.skill_state == "Target Select":
+					self.skill_state = "Skill Select"
 		else: # (if it is NOT the player's turn)
-			if self.enemies[self.active_subturn_slot].action_finished == True:
+			if self.enemies[self.active_subturn_slot].skill_finished == True:
 				self.active_subturn_slot += 1
 				if self.active_subturn_slot > last_index(self.enemies):
 					# All enemies have done their subturns, so it is now the player's turn
 					self.end_turn()
 				else:
-					self.enemies[self.active_subturn_slot].start_random_action(allies=self.enemies, enemies=self.friendlies)
+					self.enemies[self.active_subturn_slot].start_random_skill(allies=self.enemies, enemies=self.friendlies)
 
 
-
-		#self.turn.update(friendlies=self.friendlies, enemies=self.enemies)
 		for friendly in self.friendlies:
 			friendly.update()
 		for enemy in self.enemies:
 			enemy.update()
 
 		previewed_target_set = []
-		if self.action_state == "Target Select":
-			action = self.selected_action_button.linked_action
+		if self.skill_state == "Target Select":
+			skill = self.selected_skill_button.linked_skill
 
-			if action.target_set == TargetSet.All:
+			# FIX:
+			# OPTIMIZE: We only need to update the preview/hover when the mouse moves, or even further optimizing,
+			#			it only needs to be updated when the mouse crosses a boundary between slots. Right now
+			#			we're doing a ton of unnecessary stuff every frame.
+			# NOTE: I may not want to optimize this too early, because the targeting system
+			#		may change.
+
+			# TODO: This could be unsafe. It assumes that when the last target is selected everything
+			#		gets reset properly. If not, the index to skill.effects will be too large
+			#		also: pretty sure skills with empty effects lists will throw exception here too
+			next_target_set = skill.effect_groups[len(self.selected_targets)][0]
+			if next_target_set == TargetSet.All:
 				for friendly in self.friendlies:
 					if friendly.alive == True and friendly_slot_intersect(pos=game.mouse_pos, slot=friendly.slot):
 						previewed_target_set = self.friendlies+self.enemies # All
@@ -2175,34 +2221,34 @@ class BattleState:
 					for enemy in self.enemies:
 						if enemy.alive == True and enemy_slot_intersect(pos=game.mouse_pos, slot=enemy.slot):
 							previewed_target_set = self.friendlies+self.enemies # All
-			elif action.target_set == TargetSet.AllEnemies:
+			elif next_target_set == TargetSet.AllEnemies:
 				for enemy in self.enemies:
 					if enemy.alive == True and enemy_slot_intersect(pos=game.mouse_pos, slot=enemy.slot):
 						previewed_target_set = self.enemies
 						break
-			elif action.target_set == TargetSet.AllAllies:
+			elif next_target_set == TargetSet.AllAllies:
 				for friendly in self.friendlies:
 					if friendly.alive == True and friendly_slot_intersect(pos=game.mouse_pos, slot=friendly.slot):
 						previewed_target_set = self.friendlies
 						break
-			elif action.target_set == TargetSet.SingleEnemy:
+			elif next_target_set == TargetSet.SingleEnemy:
 				for enemy in self.enemies:
 					if enemy.alive == True and enemy_slot_intersect(pos=game.mouse_pos, slot=enemy.slot):
 						previewed_target_set = [enemy]
 						break
-			elif action.target_set == TargetSet.SingleAlly:
+			elif next_target_set == TargetSet.SingleAlly:
 				for friendly in self.friendlies:
 					if friendly.alive == True and friendly_slot_intersect(pos=game.mouse_pos, slot=friendly.slot):
 						previewed_target_set = [friendly]
 						break
-			elif action.target_set == TargetSet.Self:
-				if action.owner.alive == True and friendly_slot_intersect(pos=game.mouse_pos, slot=action.owner.slot):
-					previewed_target_set = [action.owner]
+			elif next_target_set == TargetSet.Self:
+				if skill.owner.alive == True and friendly_slot_intersect(pos=game.mouse_pos, slot=skill.owner.slot):
+					previewed_target_set = [skill.owner]
 
 		# Draw friendlies
 		for friendly in self.friendlies:
-			if friendly in previewed_target_set and self.action_state == "Target Select":
-				friendly.draw(target=game.screen, mouse_pos=game.mouse_pos, preview_action=action)
+			if friendly in previewed_target_set and self.skill_state == "Target Select":
+				friendly.draw(target=game.screen, mouse_pos=game.mouse_pos, preview_skill=skill)
 				highlight_surface = Surface(Vec(200,screen_height))
 				highlight_surface.set_alpha(30)
 				highlight_surface.fill(c.white)
@@ -2217,28 +2263,28 @@ class BattleState:
 				if self.is_player_turn == True:
 					highlight_surface = Surface(Vec(200,screen_height))
 					highlight_surface.set_alpha(30)
-					if friendly.action_points == 0:
+					if friendly.skill_points == 0:
 						highlight_surface.fill(c.red)
 					else:
 						highlight_surface.fill(c.green)
 
 					game.queue_surface(	surface=highlight_surface,
 										pos=Vec(friendly_slot_positions[friendly.slot], 0),
-										depth=-1)
+										depth=100)
 
-				if self.action_state == "Target Select":
-					preview_action = self.selected_action_button.linked_action
-				else:
-					preview_action = None
+				# if self.skill_state == "Target Select":
+				# 	preview_skill = self.selected_skill_button.linked_skill
+				# else:
+				# 	preview_skill = None
 
-				friendly.draw(target=game.screen, mouse_pos=game.mouse_pos, preview_action=preview_action)
+				friendly.draw(target=game.screen, mouse_pos=game.mouse_pos)
 
 		# Draw enemies
 		for enemy in self.enemies:
 			if enemy.alive == False:
 				continue
-			if enemy in previewed_target_set and self.action_state == "Target Select":
-				enemy.draw(target=game.screen, mouse_pos=game.mouse_pos, preview_action=action)
+			if enemy in previewed_target_set and self.skill_state == "Target Select":
+				enemy.draw(target=game.screen, mouse_pos=game.mouse_pos, preview_skill=skill)
 				highlight_surface = Surface(Vec(200,screen_height))
 				highlight_surface.set_alpha(30)
 				highlight_surface.fill(c.white)
@@ -2248,19 +2294,23 @@ class BattleState:
 			else:
 				enemy.draw(target=game.screen, mouse_pos=game.mouse_pos)
 
-		if self.action_state == "Target Select":
+		if self.skill_state == "Target Select":
 			# Targeting line/arrow
-			# width = abs(game.mouse_pos.x - self.selected_action_button.rect.center_right.x)
-			# height = abs(game.mouse_pos.y - self.selected_action_button.rect.center_right.y)
-			surface = Surface(size=Vec(screen_width, screen_height))
-			surface.set_colorkey(c.pink)
-			surface.fill(c.pink)
-			draw_line(	target=surface,
-						color=c.white,
-						start=self.selected_action_button.rect.center_right,
-						end=game.mouse_pos)
+			# width = abs(game.mouse_pos.x - self.selected_skill_button.rect.center_right.x)
+			# height = abs(game.mouse_pos.y - self.selected_skill_button.rect.center_right.y)
+			game.queue_drawline(start=self.selected_skill_button.rect.center_right,
+								end=game.mouse_pos,
+								color=c.white,
+								depth=-10)
+			# surface = Surface(size=Vec(screen_width, screen_height))
+			# surface.set_colorkey(c.pink)
+			# surface.fill(c.pink)
+			# draw_line(	target=surface,
+			# 			color=c.white,
+			# 			start=self.selected_skill_button.rect.center_right,
+			# 			end=game.mouse_pos)
 
-			game.queue_surface(surface=surface, depth=-10, pos=Vec(0,0))
+			# game.queue_surface(surface=surface, depth=-10, pos=Vec(0,0))
 	def draw(self, game):
 		game.queue_surface(surface=pointer_cursor_surface, depth=-100, pos=game.mouse_pos)
 	def mouse_button_pressed(self, game, button, mouse_pos):
@@ -2303,12 +2353,13 @@ class CampaignState:
 		# The units currently in the player's party
 		# 4 slots
 		self.player_units = [None]*4
-		self.add_unit_to_party(name="Warrior", slot=0)
-		self.add_unit_to_party(name="Rogue", slot=1)
-	def add_unit_to_party(self, name, slot):
+
+		for i, schematic in enumerate(game.starting_party):
+			self.add_unit_to_party(schematic=schematic, slot=i)
+	def add_unit_to_party(self, schematic, slot):
 		if slot >= 0 and slot < 4:
 			# If the slot given is a valid slot number
-			self.player_units[slot] = self.game.unit_db.generate_unit(name=name, team=0, slot=slot)
+			self.player_units[slot] = schematic.generate_unit(team=0, slot=slot)
 
 	def room_index_to_rect(self, i):
 		return Rect(	pos=Vec(100+100*i,screen_height/2),
@@ -2388,7 +2439,7 @@ class CampaignState:
 				room_rect = self.room_index_to_rect(i)
 
 				if room_rect.intersect(point=mouse_pos):
-					enemy_units = game.battle_db.get_random_battle_units(unit_db=game.unit_db)
+					enemy_units = game.battle_db.get_random_battle_units()
 					game.enter_state(room.enter(friendly_units=self.player_units,
 												enemy_units=enemy_units))
 
@@ -2396,24 +2447,31 @@ class CampaignState:
 	def key_pressed(self, game, key, mod, translated):
 		pass
 
-class BattleDatabase:
-	def __init__(self, battle_data):
+class BattleSchematic:
+	def __init__(self, friendlies=[None]*4, enemies=[None]*4):
+		self.friendlies = friendlies
+		self.enemies = enemies
+		assert(len(self.friendlies) == 4)
+		assert(len(self.enemies) == 4)
+
+class BattleSchematicDatabase:
+	def __init__(self, battle_data, unit_db):
 		self.battles = []
 
 		with open(battle_data) as f:
 			for line in f:
-				match = re.search('^\[(.*)\,(.*)\,(.*)\,(.*)\]', line.rstrip())
+				match = re.search('^\[(.*)\,(.*)\,(.*)\,(.*)\,(.*)\,(.*)\,(.*)\,(.*)\]', line.rstrip())
 				if match:
-					self.battles.append([	match.group(1),
-											match.group(2),
-											match.group(3),
-											match.group(4)])
+					b = BattleSchematic(friendlies=[unit_db.get_schematic_by_name(match.group(i)) for i in range(1,5)],
+										enemies=[unit_db.get_schematic_by_name(match.group(i)) for i in range(5,9)])
+
+					self.battles.append(b)
 				else:
 					error.log("Invalid line found while loading battles from {}".format(battle_data))
 
-	def get_random_battle_units(self, unit_db):
-		names = random.choice(self.battles)
-		return [unit_db.generate_unit(name=n, team=1, slot=i) for i, n in enumerate(names)]
+	def get_random_battle_units(self):
+		battle = random.choice(self.battles)
+		return [unit_schematic.generate_unit(team=1, slot=i) for i,unit_schematic in enumerate(battle.enemies) if unit_schematic != None]
 
 class Game:
 	def __init__(self):
@@ -2426,9 +2484,14 @@ class Game:
 		#pg.key.set_repeat(250, 32)
 
 
-		self.action_db = ActionSchematicDatabase(action_data_filepath="actions.dat")
+		self.skill_db = SkillSchematicDatabase(skill_data_filepath="skills.dat")
 		self.unit_db = UnitSchematicDatabase(unit_data="units.dat", animation_data="animations.dat")
-		self.battle_db = BattleDatabase(battle_data="battles.dat")
+		self.battle_db = BattleSchematicDatabase(battle_data="battles.dat", unit_db=self.unit_db)
+
+		self.starting_party = [
+			self.unit_db.get_schematic_by_name(name="Warrior"),
+			self.unit_db.get_schematic_by_name(name="Rogue")
+		]
 
 		self.state_stack = []
 		self.enter_state(MainMenuState())

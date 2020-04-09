@@ -1,6 +1,3 @@
-Editor stuff
-*1) Labels for property UI elements
-*2) Action slots with pop-up menu that lets you select from the available actions
-3) "Recently edited" display, so it's easy to find stuff you've been editing recently.
-4) Need a way to "eat" clicks when a dropdown box is opened, and one of its entries is selected, but the rect overlaps another UI element (selecting the entry also focuses the overlapping UI element right now)
-5) Editing a unit to have more actions than it previously had crashes (because UnitSchematic.action_schematics is not always length 4, but it probably should be). Related: I need to implement an "empty" action, because I think most of the codebase assumes that all elements of Unit.actions will be actual Action objects, but letting them be None would be useful.
+\*Add target set to action editor panel
+*Clicking save button when nothing is loaded in editor crashes
+*When a friendly unit dies, it still acts like it has a subturn and you can click invisible action buttons

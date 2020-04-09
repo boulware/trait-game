@@ -27,6 +27,7 @@ pink = (255,200,200)
 blue_green = (0,150,150)
 
 # Game parameters
+skill_slots = 4
 
 # Editor layout parameters
 
@@ -38,7 +39,7 @@ general_ui_layout = {
 
 class EditableType(Enum):
 	Unit = 0
-	Action = 1
+	Skill = 1
 	Battle = 2
 
 editable_type_strings = ["Unit", "Skill", "Battle"]
@@ -56,28 +57,16 @@ unit_ui_indices = {	'name': 0,
 					'armor': 3,
 					'focus': 4}
 
-action_ui_indices = { 	'name': 0,
-						'description': 1,
-						'target set': 2,
-						'vigor requirement': 3,
-						'armor requirement': 4,
-						'focus requirement': 5,
-						'vigor damage': 6,
-						'armor damage': 7,
-						'focus damage': 8}
+skill_ui_indices = { 	'name': 0,
+						'vigor requirement': 1,
+						'armor requirement': 2,
+						'focus requirement': 3}
 
-battle_ui_indices = {	'Team 0, Slot 0': 0,
-						'Team 0, Slot 1': 1,
-						'Team 0, Slot 2': 2,
-						'Team 0, Slot 3': 3,
-						'Team 1, Slot 0': 4,
-						'Team 1, Slot 1': 5,
-						'Team 1, Slot 2': 6,
-						'Team 1, Slot 3': 7}
+battle_ui_indices = {}
 
 ui_indices = {
 	EditableType.Unit: unit_ui_indices,
-	EditableType.Action: action_ui_indices,
+	EditableType.Skill: skill_ui_indices,
 	EditableType.Battle: battle_ui_indices
 }
 
@@ -88,8 +77,16 @@ unit_ui_dropdowns = [
 	Vec(1000,300)
 ]
 
+skill_ui_dropdowns = [
+	Vec(800,200)
+]
+
+battle_ui_dropdowns = \
+	[Vec(400+200*y,100) for y in range(4)] + \
+	[Vec(400+200*y,400) for y in range(4)]
+
 ui_dropdowns = {
 	EditableType.Unit: unit_ui_dropdowns,
-	EditableType.Action: [],
-	EditableType.Battle: []
+	EditableType.Skill: skill_ui_dropdowns,
+	EditableType.Battle: battle_ui_dropdowns
 }

@@ -1,0 +1,40 @@
+skill: Rest
+	target:self
+		heal: 2,0,0
+skill: Medium Strike
+	requires: 2,0,0
+	target:single enemy
+		damage: 5,0,0
+skill: Intimidate
+	requires: 0,0,1
+	target: single enemy
+		damage: 0,0,5
+skill: Medium Bash
+	requires: 0,0,1
+	target:single enemy
+		damage: 0,4,0
+skill: Light Strike
+	requires: 2,0,0
+	target:single enemy
+		damage:3,0,0
+skill: Bite
+	requires:0,0,4
+	target: single enemy
+		damage: 4,0,0
+skill: Howl
+	target: all allies
+		heal: 0,0,1
+skill: Heal
+	requires: 0,0,2
+	target: all allies
+		heal: 2,0,0
+skill: Rig Up
+	requires: 0,1,0
+	target: self
+		damage: 0,1,0
+	target: other ally
+		heal: 0,1,0
+skill: Attack
+	requires: 0,0,2
+	target: single enemy
+		damage: 3,0,0

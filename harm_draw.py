@@ -14,7 +14,7 @@ class Surface:
 	def from_pgsurface(cls, pg_surface):
 		new = Surface(size=Vec(0,0))
 		new._pg_surface = pg_surface
-		return new		
+		return new
 	@classmethod
 	def from_file(cls, filepath):
 		file_surface = pg.image.load(filepath)
@@ -45,7 +45,7 @@ class Surface:
 	def __deepcopy__(self, memo):
 		other = Surface(size=self.size)
 		other._pg_surface = self._pg_surface.copy()
-		return other		
+		return other
 
 class AlignX(Enum):
 	Left = 0
@@ -82,7 +82,7 @@ def draw_rect(target, color, pos, size, width=0):
 		# It's a little janky as-is. The given drawn size is slightly smaller than the given size,
 		# but it's roughly correct (the native pg.draw.rect doesn't work with negative widths at all)
 		rect = pg.Rect(	int(pos.x-width), int(pos.y-width),
-						int(size.x+width*2), int(size.y+width*2))		
+						int(size.x+width*2), int(size.y+width*2))
 		pg.draw.rect(	target._pg_surface,
 						color,
 						rect,
@@ -102,7 +102,7 @@ def draw_text(target, color, pos, text, font, x_center=True, y_center=True):
 		y = pos.y - height/2
 	else:
 		y = pos.y
-	
+
 	draw_surface(target=target, surface=text_surface, pos=Vec(x,y))
 
 	return Rect(Vec(x,y), text_surface.size)
@@ -120,7 +120,7 @@ def draw_text_wrapped(target, text, pos, font, color=c.white, word_wrap_width=No
 
 	for line_number, line in enumerate(lines):
 
-		draw_surface(	target=text_surface, 
+		draw_surface(	target=text_surface,
 						surface=Surface.from_pgsurface(font.render(line, True, color)),
 						pos=Vec(0,line_number*line_spacing))
 

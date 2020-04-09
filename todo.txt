@@ -11,8 +11,19 @@ KEY:
 *Implement multiples tweens in .dat loading
 *Fix crash when there's a move in animations.dat that doesn't match with the given unit name.
 	=> On top of that, some general error reporting when the animations are invalidly defined would be good too
-*Action preview while selecting a target for an ally's action incorrectly previews the damage on all alies, regardless of where the mouse is.
+\*Action preview while selecting a target for an ally's action incorrectly previews the damage on all alies, regardless of where the mouse is.
 *Convert queue_surface stuff that uses primitives like lines/rects into queue_drawline/queue_drawrect calls instead. They might be faster (they certainly wouldn't be slower... right?)
 *There's a confusion with mouse button indices. On the event queue, left click is index=1, but in pg.mouse.get_state() [or whatever it is], left click is index=0. This needs to be sorted out, especially with the util.KeyState (if I'm still going to continue to use that)
 *Holding down key (and others) in debug menu doesn't repeat properly. It does 3 ticks and then stops? Maybe because of the interaction between the pg.event key stuff and my InputState class [Indeed, disabling the pygame keyrepeat makes it work again. And naturally, this makes key repeat for something like the editor not work properly, so we need to figure out a way to reconcile all of this]
 *Sometimes inputs can jump between states. I need to clear inputs or ignore them for the first frame or something. (Example: when clicking on a battle room in campaign, it will select a skill use as soon as the battle opens)
+*"Recently edited" display, so it's easy to find stuff you've been editing recently.
+*Need a way to "eat" clicks when a dropdown box is opened, and one of its entries is selected, but the rect overlaps another UI element (selecting the entry also focuses the overlapping UI element right now)
+\*Editing a unit to have more actions than it previously had crashes (because UnitSchematic.action_schematics is not always length 4, but it probably should be). Related: I need to implement an "empty" action, because I think most of the codebase assumes that all elements of Unit.actions will be actual Action objects, but letting them be None would be useful.
+\*Implement action saving
+*Units with no actions slotted have buggy behavior. Friendly units: you can't select an action to use so you're stuck on your turn. Enemy units: seem to work properly, they just instantly skip when it gets to their subturn
+\*start_random_action() needs to be fixed to work with action slots being equal to None
+*Actions that deal both vigor and armor damage may deal the wrong amount of damage (I haven't checked). The armor-reduced vigor damage should use the pre-damage armor.
+\*Huge frame drops after you've selected an action to use (while choosing the targets) [fixed: it was because I was drawing a line on a screen-sized surface and then drawing the whole surface? wtf?]
+*Use compiled regex? (re.compile()) instead of creating them all the time? Not sure the optimization is worth it. (docs say that recent regular expressions are cached, so programs that only use a few don't have to worry about compiling)
+*Implement permanent saving in the editor (as of now, it saves only for the current session until the application is closed, and then everything resets)
+*Improve .dat formats for units and animations

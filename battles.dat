@@ -1,3 +1,3 @@
-[Wolf,Human,Wolf,Human]
-[Rogue,Rogue,Wolf,Human]
-[Warrior,Warrior,Human,Warrior]
+[Warrior,Rogue,_,_,Wolf,Human,Wolf,Human]
+[Warrior,Rogue,_,_,Rogue,Rogue,Wolf,Human]
+[Warrior,Rogue,_,_,Warrior,Warrior,Human,Warrior]
